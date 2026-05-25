@@ -1,0 +1,167 @@
+{
+  "project_info": {
+    "project_number": "551110643156",
+    "project_id": "colae-app",
+    "storage_bucket": "colae-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:551110643156:android:8d4c96e64912732fb51a41",
+        "android_client_info": {
+          "package_name": "com.colae.cust"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "551110643156-afitbsf749gfkaumbt77v5n02vht64pg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.colae.cust",
+            "certificate_hash": "815071be28a6c9afc4a69cb8b31aa4f090ac6ec7"
+          }
+        },
+        {
+          "client_id": "551110643156-q3rqq5606sn8ujergra427rcvlft0l1r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.colae.cust",
+            "certificate_hash": "4cc8458dd79b7af8b15c8d420b2695b547616570"
+          }
+        },
+        {
+          "client_id": "551110643156-u58h3khpnef3fov2cgcpmdc7akf7m2g2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDp8zaU1boMWBuW0KfpJslW-RpMT4UkfCo"
+        },
+        {
+          "current_key": "AIzaSyCOplt0acK80G1VoX9qwUtmW1Dhba567Qo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "551110643156-u58h3khpnef3fov2cgcpmdc7akf7m2g2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "551110643156-af0hvfn5tf8mqgnstk0uv5ou19ra21ep.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dev.colaeShop"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:551110643156:android:98e2f81191975bf9b51a41",
+        "android_client_info": {
+          "package_name": "com.colae.shop"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "551110643156-n55j66bg8854bi98skbdpfcb7orqepe3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.colae.shop",
+            "certificate_hash": "0d21c54e59fdb382ce18ec05f4d00f93dd8b32fc"
+          }
+        },
+        {
+          "client_id": "551110643156-pjgseg5a1cek043mstdvh28hocvvvt4s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.colae.shop",
+            "certificate_hash": "23350f950512a8465cf9f95b2f90641fcf3b3a30"
+          }
+        },
+        {
+          "client_id": "551110643156-u58h3khpnef3fov2cgcpmdc7akf7m2g2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDp8zaU1boMWBuW0KfpJslW-RpMT4UkfCo"
+        },
+        {
+          "current_key": "AIzaSyCOplt0acK80G1VoX9qwUtmW1Dhba567Qo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "551110643156-u58h3khpnef3fov2cgcpmdc7akf7m2g2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "551110643156-af0hvfn5tf8mqgnstk0uv5ou19ra21ep.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dev.colaeShop"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:551110643156:android:7ae12ecc0e65af7db51a41",
+        "android_client_info": {
+          "package_name": "com.dev.colae_bike"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "551110643156-m5q04cnmq1vp8n97hgm5oj9g22j6nlf2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dev.colae_bike",
+            "certificate_hash": "0d21c54e59fdb382ce18ec05f4d00f93dd8b32fc"
+          }
+        },
+        {
+          "client_id": "551110643156-u58h3khpnef3fov2cgcpmdc7akf7m2g2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDp8zaU1boMWBuW0KfpJslW-RpMT4UkfCo"
+        },
+        {
+          "current_key": "AIzaSyCOplt0acK80G1VoX9qwUtmW1Dhba567Qo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "551110643156-u58h3khpnef3fov2cgcpmdc7akf7m2g2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "551110643156-af0hvfn5tf8mqgnstk0uv5ou19ra21ep.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dev.colaeShop"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

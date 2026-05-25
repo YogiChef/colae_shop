@@ -1,0 +1,45 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "colae-app",
+          "appId": "1:551110643156:android:c6f1560c727f8edcb51a41",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "colae-app",
+          "configurations": {
+            "android": "1:551110643156:android:c6f1560c727f8edcb51a41",
+            "ios": "1:551110643156:ios:d0a681e0c839e1a2b51a41",
+            "macos": "1:551110643156:ios:d0a681e0c839e1a2b51a41",
+            "web": "1:551110643156:web:42fec06911539a1fb51a41",
+            "windows": "1:551110643156:web:f584378342133d78b51a41"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-southeast1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

@@ -1,0 +1,186 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    function isChatParticipant(chatData) {
+      return chatData.buyerId == request.auth.uid || chatData.riderId == request.auth.uid;
+    }
+
+    // === Public Images ===
+    match /banner/{imageName} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /category_img/{imageName} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /images/{imageName} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // === Categories ===
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // === Buyers ===
+    match /buyers/{buyerId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == buyerId;
+
+      match /address/{addressId} {
+        allow read: if isSignedIn();
+        allow write, create: if isSignedIn() && request.auth.uid == buyerId;
+      }
+    }
+
+    // === Chats (vendor-buyer) ===
+    match /chats/{chatId} {
+      allow create: if isSignedIn()
+                   && request.resource.data.buyerId is string
+                   && request.resource.data.vendorId is string
+                   && request.resource.data.proId is string
+                   && (request.auth.uid == request.resource.data.buyerId || request.auth.uid == request.resource.data.vendorId)
+                   && request.resource.data.senderId == request.auth.uid
+                   && request.resource.data.messageType in ['text', 'image', 'slip']
+                   && request.resource.data.chatDate == request.time;
+
+      allow read: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid
+      );
+
+      allow update: if isSignedIn()
+                   && (resource.data.buyerId == request.auth.uid || resource.data.vendorId == request.auth.uid)
+                   && request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['message', 'imageUrl', 'messageType', 'senderId', 'chatDate',
+                                'lastMessage', 'lastMessageTime', 'unreadCountBuyer', 'unreadCountVendor', 'read']);
+
+      allow delete: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // === Rider-Customer Chat ===
+    match /rider_chats/{chatId} {
+      allow create: if isSignedIn()
+                   && request.resource.data.orderId is string
+                   && request.resource.data.riderId is string
+                   && request.resource.data.buyerId is string
+                   && (request.auth.uid == request.resource.data.riderId || request.auth.uid == request.resource.data.buyerId)
+                   && request.resource.data.senderId == request.auth.uid
+                   && request.resource.data.messageType in ['text', 'image']
+                   && request.resource.data.chatDate == request.time;
+
+      allow read: if isSignedIn() && isChatParticipant(resource.data);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // === Orders ===
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid ||
+        resource.data.riderId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn()
+                   && request.resource.data.buyerId == request.auth.uid
+                   && request.resource.data.status in ['pending', 'paid']
+                   && request.resource.data.keys().hasAll(['buyerId', 'vendorId', 'status', 'totalPrice', 'items', 'timestamp']);
+
+      allow update: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid ||
+        resource.data.riderId == request.auth.uid ||
+        isAdmin()
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'status', 'slipStatus', 'slipImage', 'slipChatId',
+        'notes', 'riderId', 'assignedAt', 'selfDeliver',
+        'vendorEarnings', 'riderEarnings', 'deliveredAt', 'cancelledAt',
+        'shippingCharge', 'updatedAt', 'items', 'read', 'totalPrice',
+        'preparingCompletedAt', 'customerLocation', 'lastLocationUpdate',
+        'askme', 'paymentMethod', 'requiresAdminReview',
+        'cancelReason', 'pickedUpAt', 'tableId'
+      ]);
+
+      allow delete: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid && resource.data.riderId == null ||
+        isAdmin()
+      );
+    }
+
+    // === Vendors ===
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == vendorId;
+
+      match /{subcollection=**} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == vendorId;
+      }
+    }
+
+    // === Type ===
+    match /type/{typeId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn()
+                                   && request.resource.data.vendorId == request.auth.uid
+                                   && request.resource.data.keys().hasAll(['typename', 'vendorId']);
+    }
+
+    // === Products ===
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && request.resource.data.vendorId == request.auth.uid;
+      allow update: if isAdmin() && request.resource.data.approved == true;
+
+      match /{subcollection=**} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && resource.data.vendorId == request.auth.uid;
+      }
+    }
+
+    // === Notifications ===
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && resource.data.to == request.auth.uid;
+      allow create: if isSignedIn()
+                   && request.resource.data.keys().hasAll(['to', 'message', 'type', 'timestamp'])
+                   && request.resource.data.to is string;
+      allow update: if isSignedIn() && resource.data.to == request.auth.uid
+                   && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && (
+        resource.data.to == request.auth.uid || isAdmin()
+      );
+    }
+
+    // === Riders ===
+    match /riders/{riderId} {
+      allow read: if isSignedIn();
+      allow update: if isSignedIn() && request.auth.uid == riderId;
+      allow create, delete: if false;
+    }
+
+    // === Safety net ===
+    match /{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
