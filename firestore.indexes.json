@@ -299,6 +299,32 @@
       ],
       "density": "SPARSE_ALL"
     }
+    ,
+    {
+      "collectionGroup": "hotel_bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "hotelId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "hotel_bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "hotelId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "hotel_bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "guestId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
   ],
   "fieldOverrides": []
 }

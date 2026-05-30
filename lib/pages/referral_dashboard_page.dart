@@ -103,6 +103,25 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
     return counts;
   }
 
+  Future<double> _calculatePendingThisMonth() async {
+    final now = DateTime.now();
+    final monthKey =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}';
+
+    final snap = await FirebaseFirestore.instance
+        .collection('referral_transactions')
+        .where('toUserId', isEqualTo: _uid)
+        .where('month', isEqualTo: monthKey)
+        .where('status', isEqualTo: 'pending_payout')
+        .get();
+
+    double total = 0;
+    for (final doc in snap.docs) {
+      total += (doc.data()['amount'] as num?)?.toDouble() ?? 0;
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -335,9 +354,56 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
               ),
             ),
             SizedBox(height: 12.h),
+
+            // ยอดเดือนนี้ (รอจ่ายวันที่ 5)
+            FutureBuilder<double>(
+              future: _calculatePendingThisMonth(),
+              builder: (context, snap) {
+                final monthAmount = snap.data ?? 0;
+                return Container(
+                  padding: EdgeInsets.all(12.w),
+                  margin: EdgeInsets.only(bottom: 12.h),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade50,
+                    borderRadius: BorderRadius.circular(8.r),
+                    border: Border.all(color: Colors.purple.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.event, color: Colors.purple, size: 20.sp),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'รายได้เดือนนี้',
+                              style: styles(fontSize: 11.sp, color: Colors.grey[700]),
+                            ),
+                            Text(
+                              '฿${monthAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 16.sp,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple,
+                              ),
+                            ),
+                            Text(
+                              'จ่ายวันที่ 5 ของเดือนถัดไป',
+                              style: styles(fontSize: 10.sp, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
             Row(
               children: [
-                _earningsItem('รอถอน', pending, Colors.orange),
+                _earningsItem('พร้อมถอน', pending, Colors.orange),
                 _earningsItem('ทั้งหมด', total, Colors.blue),
                 _earningsItem('ถอนแล้ว', withdrawn, Colors.green),
               ],

@@ -57,6 +57,7 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   thai_address_picker: ^1.0.4
   flutter_riverpod: ^2.6.1
+  table_calendar: ^3.1.2
 dependency_overrides:
   camera_android_camerax: 0.6.9+1
 dev_dependencies:

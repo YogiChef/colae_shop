@@ -178,6 +178,67 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // === Hotel Lists (managed by admin) ===
+    match /hotel_lists/{listId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // === Hotels (vendor manages own hotel) ===
+    match /hotels/{hotelId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == hotelId;
+      allow delete: if isSignedIn() && (request.auth.uid == hotelId || isAdmin());
+
+      match /rooms/{roomId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == hotelId;
+
+        match /special_prices/{dateId} {
+          allow read: if isSignedIn();
+          allow write: if isSignedIn() && request.auth.uid == hotelId;
+        }
+
+        match /calendar/{dateId} {
+          allow read: if isSignedIn();
+          allow write: if isSignedIn() && request.auth.uid == hotelId;
+        }
+      }
+    }
+
+    // === Hotel Bookings ===
+    match /hotel_bookings/{bookingId} {
+      // อ่านได้: guest, hotel owner, admin
+      allow read: if isSignedIn() && (
+        resource.data.guestId == request.auth.uid ||
+        resource.data.hotelId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // สร้าง booking: ต้องเป็น guest ของตัวเอง, status pending
+      allow create: if isSignedIn()
+                   && request.resource.data.guestId == request.auth.uid
+                   && request.resource.data.status == 'pending'
+                   && request.resource.data.keys().hasAll([
+                        'hotelId', 'roomId', 'guestId', 'guestName',
+                        'checkIn', 'checkOut', 'nights', 'rooms',
+                        'totalPrice', 'depositAmount', 'status'
+                      ]);
+
+      // update: guest หรือ hotel owner เปลี่ยน status ได้
+      allow update: if isSignedIn() && (
+        resource.data.guestId == request.auth.uid ||
+        resource.data.hotelId == request.auth.uid ||
+        isAdmin()
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'status', 'depositPaid', 'fullyPaid', 'depositSlipUrl',
+        'cancelReason', 'cancelledAt', 'updatedAt',
+        'checkedInAt', 'completedAt'
+      ]);
+
+      allow delete: if isAdmin();
+    }
+
     // === Safety net ===
     match /{allPaths=**} {
       allow read, write: if isSignedIn();

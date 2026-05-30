@@ -238,12 +238,20 @@ exports.deleteChatsOnOrderDelivered = onDocumentUpdated("orders/{orderId}", asyn
             .where('buyerId', '==', buyerId)
             .where('vendorId', '==', vendorId)
             .get();
-        vendorBuyerSnap.docs.forEach(doc => batch.delete(doc.ref));
+        vendorBuyerSnap.docs.forEach(doc => {
+            const proId = doc.data().proId ?? '';
+            if (typeof proId === 'string' && proId.startsWith('hotel_')) return;
+            batch.delete(doc.ref);
+        });
 
         const riderBuyerSnap = await db.collection('chats')
             .where('orderId', '==', orderId)
             .get();
-        riderBuyerSnap.docs.forEach(doc => batch.delete(doc.ref));
+        riderBuyerSnap.docs.forEach(doc => {
+            const proId = doc.data().proId ?? '';
+            if (typeof proId === 'string' && proId.startsWith('hotel_')) return;
+            batch.delete(doc.ref);
+        });
 
         await batch.commit();
         console.log(`[DELETE-CHATS] ✅ orderId=${orderId} | vendorBuyer=${vendorBuyerSnap.size} | riderBuyer=${riderBuyerSnap.size}`);
@@ -403,7 +411,7 @@ exports.processReferralCommission = onDocumentUpdated("orders/{orderId}", async 
   const foodTotal = totalPrice - shippingCharge;
   if (foodTotal <= 0) return;
 
-  const pool = parseFloat((foodTotal * 0.05).toFixed(2));
+  const pool = parseFloat((foodTotal * 0.02).toFixed(2));
   const rates = [0.20, 0.10, 0.05, 0.03, 0.02];
 
   const buyerFound = await getUserDoc(buyerId);
@@ -417,52 +425,236 @@ exports.processReferralCommission = onDocumentUpdated("orders/{orderId}", async 
   for (let i = 0; i < Math.min(uplineIds.length, 5); i++) {
     const uplineId = uplineIds[i];
     const commission = parseFloat((pool * rates[i]).toFixed(2));
-    const level = i + 1;
 
-    const qualified = await checkQualified(uplineId);
-    const toId = qualified ? uplineId : 'platform';
-
-    const earningsRef = db.collection('referral_earnings').doc(toId);
-    batch.set(earningsRef, {
-      pendingEarnings: admin.firestore.FieldValue.increment(commission),
-      totalEarnings: admin.firestore.FieldValue.increment(commission),
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-
+    // บันทึก transaction เก็บไว้ ยังไม่ update earnings
     const txRef = db.collection('referral_transactions').doc();
     batch.set(txRef, {
+      source: 'delivery',
       fromBuyerId: buyerId,
-      toUserId: toId,
-      originalUplineId: uplineId,
-      qualified: qualified,
+      toUserId: uplineId,
       orderId: orderId,
-      level: level,
+      level: i + 1,
       foodTotal: foodTotal,
       pool: pool,
       commissionRate: rates[i],
       amount: commission,
       month: month,
+      status: 'pending_payout',
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
   }
 
-  const totalDistributed = parseFloat(
-    rates.slice(0, uplineIds.length)
-      .reduce((sum, r) => sum + pool * r, 0)
-      .toFixed(2)
-  );
-  const platformShare = parseFloat((pool - totalDistributed).toFixed(2));
-  if (platformShare > 0) {
-    const platformRef = db.collection('referral_earnings').doc('platform');
-    batch.set(platformRef, {
-      pendingEarnings: admin.firestore.FieldValue.increment(platformShare),
-      totalEarnings: admin.firestore.FieldValue.increment(platformShare),
+  await batch.commit();
+  logger.info(`[REFERRAL] ✅ orderId=${orderId} pool=${pool} uplines=${uplineIds.length}`);
+});
+
+exports.processHotelReferralCommission = onDocumentUpdated("hotel_bookings/{bookingId}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+
+  if (before?.status === after?.status) return;
+  if (after?.status !== 'completed') return;
+
+  const db = admin.firestore();
+  const bookingId = event.params.bookingId;
+  const guestId = after.guestId;
+  if (!guestId) return;
+
+  const totalPrice = Number(after.totalPrice ?? 0);
+  const refundAmount = Number(after.refundAmount ?? 0);
+  const effectiveAmount = totalPrice - refundAmount;
+  if (effectiveAmount <= 0) return;  // คืนเงินเต็ม = ไม่คิด MLM
+
+  const pool = parseFloat((effectiveAmount * 0.02).toFixed(2));
+  const rates = [0.20, 0.10, 0.05, 0.03, 0.02];
+
+  const guestFound = await getUserDoc(guestId);
+  if (!guestFound) return;
+  const uplineIds = guestFound.doc.data()?.uplineIds ?? [];
+  if (uplineIds.length === 0) return;
+
+  const batch = db.batch();
+  const month = new Date().toISOString().slice(0, 7);
+
+  for (let i = 0; i < Math.min(uplineIds.length, 5); i++) {
+    const uplineId = uplineIds[i];
+    const commission = parseFloat((pool * rates[i]).toFixed(2));
+
+    const txRef = db.collection('referral_transactions').doc();
+    batch.set(txRef, {
+      source: 'hotel',
+      fromBuyerId: guestId,
+      toUserId: uplineId,
+      bookingId: bookingId,
+      level: i + 1,
+      totalPrice: totalPrice,
+      effectiveAmount: effectiveAmount,
+      refundAmount: refundAmount,
+      pool: pool,
+      commissionRate: rates[i],
+      amount: commission,
+      month: month,
+      status: 'pending_payout',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  // update buyers totalSpent
+  await db.collection('buyers').doc(guestId).update({
+    totalSpent: admin.firestore.FieldValue.increment(effectiveAmount),
+  });
+
+  await batch.commit();
+  logger.info(`[HOTEL-REFERRAL] ✅ bookingId=${bookingId} pool=${pool} uplines=${uplineIds.length}`);
+});
+
+exports.monthlyReferralPayout = onSchedule({
+  schedule: '0 9 5 * *',  // 09:00 วันที่ 5 ทุกเดือน
+  timeZone: 'Asia/Bangkok',
+  region: 'asia-southeast1',
+}, async (event) => {
+  const db = admin.firestore();
+  const now = new Date();
+
+  // คำนวณเดือนก่อน
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthKey = prevMonth.toISOString().slice(0, 7); // "2026-05"
+
+  logger.info(`[PAYOUT] เริ่ม payout เดือน ${prevMonthKey}`);
+
+  // ดึง transactions ทั้งหมดของเดือนก่อน ที่ยัง pending_payout
+  const snap = await db.collection('referral_transactions')
+    .where('month', '==', prevMonthKey)
+    .where('status', '==', 'pending_payout')
+    .get();
+
+  if (snap.empty) {
+    logger.info(`[PAYOUT] ไม่มี transaction ในเดือน ${prevMonthKey}`);
+    return;
+  }
+
+  // group ตาม toUserId
+  const userTotals = {}; // { uid: { total: 0, txIds: [] } }
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    const uid = d.toUserId;
+    const amount = Number(d.amount ?? 0);
+    if (!userTotals[uid]) userTotals[uid] = { total: 0, txIds: [] };
+    userTotals[uid].total += amount;
+    userTotals[uid].txIds.push(doc.id);
+  }
+
+  // จ่าย commission ทีละคน
+  let qualifiedCount = 0;
+  let unqualifiedCount = 0;
+  let platformTotal = 0;
+
+  for (const [uid, data] of Object.entries(userTotals)) {
+    const qualified = await checkQualified(uid);
+    const totalAmount = parseFloat(data.total.toFixed(2));
+
+    if (qualified) {
+      // อัปเดต earnings ของ user
+      await db.collection('referral_earnings').doc(uid).set({
+        pendingEarnings: admin.firestore.FieldValue.increment(totalAmount),
+        totalEarnings: admin.firestore.FieldValue.increment(totalAmount),
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      // mark transactions as paid_out
+      const batch = db.batch();
+      for (const txId of data.txIds) {
+        batch.update(db.collection('referral_transactions').doc(txId), {
+          status: 'paid_out',
+          paidOutAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+
+      qualifiedCount++;
+      logger.info(`[PAYOUT] ✅ ${uid}: +฿${totalAmount}`);
+    } else {
+      // ไป platform
+      platformTotal += totalAmount;
+
+      const batch = db.batch();
+      for (const txId of data.txIds) {
+        batch.update(db.collection('referral_transactions').doc(txId), {
+          status: 'forfeited',
+          forfeitedAt: admin.firestore.FieldValue.serverTimestamp(),
+          originalToUserId: uid,
+          toUserId: 'platform',
+        });
+      }
+      await batch.commit();
+
+      unqualifiedCount++;
+      logger.info(`[PAYOUT] ❌ ${uid} ไม่ qualified: ฿${totalAmount} → platform`);
+    }
+  }
+
+  // อัปเดต platform earnings
+  if (platformTotal > 0) {
+    await db.collection('referral_earnings').doc('platform').set({
+      pendingEarnings: admin.firestore.FieldValue.increment(platformTotal),
+      totalEarnings: admin.firestore.FieldValue.increment(platformTotal),
       lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   }
 
-  await batch.commit();
-  logger.info(`[REFERRAL] ✅ orderId=${orderId} pool=${pool} uplines=${uplineIds.length}`);
+  logger.info(`[PAYOUT] DONE: qualified=${qualifiedCount} forfeited=${unqualifiedCount} platform=฿${platformTotal}`);
+});
+
+exports.deleteOldHotelChats = onSchedule({
+  schedule: '0 3 * * *',  // ทุกวัน 03:00
+  timeZone: 'Asia/Bangkok',
+  region: 'asia-southeast1',
+}, async (event) => {
+  const db = admin.firestore();
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 วันก่อน
+
+  logger.info(`[CHAT-CLEANUP] เริ่มลบ hotel chat ก่อน ${cutoff.toISOString()}`);
+
+  // หา booking ที่ completed + checkOut เกิน 30 วัน
+  const bookingsSnap = await db.collection('hotel_bookings')
+    .where('status', '==', 'completed')
+    .where('checkOut', '<', admin.firestore.Timestamp.fromDate(cutoff))
+    .get();
+
+  if (bookingsSnap.empty) {
+    logger.info('[CHAT-CLEANUP] ไม่มี booking ที่ต้องลบ chat');
+    return;
+  }
+
+  let deletedChats = 0;
+  let processedBookings = 0;
+
+  for (const bookingDoc of bookingsSnap.docs) {
+    const bookingId = bookingDoc.id;
+    const proId = `hotel_${bookingId}`;
+
+    // ข้ามถ้าลบไปแล้ว (มี flag)
+    if (bookingDoc.data().chatDeleted === true) continue;
+
+    // ลบ chat ของ booking นี้
+    const chatSnap = await db.collection('chats')
+      .where('proId', '==', proId)
+      .get();
+
+    if (!chatSnap.empty) {
+      const batch = db.batch();
+      chatSnap.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      deletedChats += chatSnap.docs.length;
+    }
+
+    // mark ว่าลบ chat แล้ว (กันลบซ้ำ + skip ครั้งหน้า)
+    await bookingDoc.ref.update({ chatDeleted: true });
+    processedBookings++;
+  }
+
+  logger.info(`[CHAT-CLEANUP] DONE: bookings=${processedBookings} chats deleted=${deletedChats}`);
 });
 
 exports.updateBuyerTotalSpent = onDocumentUpdated("orders/{orderId}", async (event) => {

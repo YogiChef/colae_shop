@@ -13,7 +13,9 @@ import 'package:colae_shop/pages/tabs/settings/logout.dart';
 import 'package:colae_shop/pages/main_vendor_page.dart';
 import 'package:colae_shop/pages/tabs/settings/table_qr_page.dart';
 import 'package:colae_shop/services/sevice.dart';
+import 'package:colae_shop/pages/mode_selector_page.dart';
 import 'package:colae_shop/widgets/button_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:colae_shop/widgets/time_selector_widget.dart';
 
 class StoreSettingsPage extends StatefulWidget {
@@ -359,6 +361,24 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
                     ),
                   );
                 }),
+                SizedBox(height: 8.h),
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz, color: Colors.blue),
+                  title: Text('เปลี่ยนบริการ', style: styles(fontSize: 16.sp)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.remove('vendor_last_mode');
+                    if (!context.mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ModeSelectorPage(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                ),
               ],
             ),
           );

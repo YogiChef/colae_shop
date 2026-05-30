@@ -16,8 +16,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:thai_address_picker/thai_address_picker.dart'
     hide ChangeNotifierProvider;
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:colae_shop/auth/landing_page.dart';
 import 'package:colae_shop/auth/login_page.dart';
+import 'package:colae_shop/pages/mode_selector_page.dart';
 import 'package:colae_shop/providers/product_provider.dart';
 import 'package:colae_shop/providers/vendor_order_provider.dart';
 import 'package:colae_shop/services/notification_service.dart';
@@ -55,6 +57,7 @@ Future<void> _updateFcmToken(String newToken) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('th', null);
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
@@ -244,7 +247,7 @@ class _SplashViewState extends State<SplashView> {
   void _navigateToNextScreen() async {
     final User? user = await FirebaseAuth.instance.authStateChanges().first;
     if (user != null) {
-      Get.offAll(() => const LandingPage());
+      Get.offAll(() => const ModeSelectorPage());
     } else {
       Get.offAll(() => const LoginPage());
     }
