@@ -290,7 +290,7 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
 
   Widget _statCard(String label, String value, IconData icon, Color color) {
     return Container(
-      padding: EdgeInsets.all(12.w),
+      padding: EdgeInsets.all(6.w),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12.r),
@@ -349,13 +349,12 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
       padding: EdgeInsets.all(12.w),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12.r),
         boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
       child: SizedBox(
-        height: 200.h,
+        height: 210.h,
         child: BarChart(
           BarChartData(
             alignment: BarChartAlignment.spaceAround,
@@ -380,15 +379,9 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
                   getTitlesWidget: (value, _) {
                     final i = value.toInt();
                     if (i < 0 || i >= months.length) return const Text('');
-                    return Padding(
-                      padding: EdgeInsets.only(top: 4.h),
-                      child: Text(
-                        months[i],
-                        style: TextStyle(
-                          fontSize: 9.sp,
-                          color: Colors.grey[700],
-                        ),
-                      ),
+                    return Text(
+                      months[i],
+                      style: styles(fontSize: 7.sp, color: Colors.grey[700]),
                     );
                   },
                 ),
@@ -437,16 +430,16 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
     }
 
     return Container(
-      padding: EdgeInsets.all(12.w),
+      padding: EdgeInsets.only(bottom: 18, left: 12, right: 12, top: 12),
+      margin: EdgeInsets.only(bottom: 12.w),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12.r),
         boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
       child: SizedBox(
-        height: 180.h,
+        height: 210.w,
         child: LineChart(
           LineChartData(
             maxY: maxY > 0 ? maxY * 1.2 : 1000,
@@ -460,15 +453,9 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
                     final i = value.toInt();
                     if (i < 0 || i > 29) return const Text('');
                     final d = DateTime.now().subtract(Duration(days: 29 - i));
-                    return Padding(
-                      padding: EdgeInsets.only(top: 4.h),
-                      child: Text(
-                        DateFormat('d/M').format(d),
-                        style: TextStyle(
-                          fontSize: 9.sp,
-                          color: Colors.grey[700],
-                        ),
-                      ),
+                    return Text(
+                      DateFormat('d/M').format(d),
+                      style: styles(fontSize: 7.spMax, color: Colors.grey[700]),
                     );
                   },
                 ),
@@ -521,7 +508,7 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
   Widget _recentList() {
     if (_recentBookings.isEmpty) {
       return Container(
-        padding: EdgeInsets.all(20.w),
+        padding: EdgeInsets.all(6.w),
         alignment: Alignment.center,
         child: Text('ยังไม่มีการจอง', style: styles(color: Colors.grey)),
       );
@@ -534,41 +521,72 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
         final checkIn = (d['checkIn'] as Timestamp).toDate();
         return Card(
           margin: EdgeInsets.only(bottom: 8.h),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _statusColor(status).withOpacity(0.2),
-              child: Icon(
-                _statusIcon(status),
-                color: _statusColor(status),
-                size: 18,
-              ),
-            ),
-            title: Text(
-              d['guestName'] ?? '-',
-              style: styles(fontSize: 14.sp, fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              '${d['roomName'] ?? '-'} • ${DateFormat('d MMM').format(checkIn)} • ${d['nights']} คืน',
-              style: styles(fontSize: 12.sp, color: Colors.grey[700]),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '฿${(d['totalPrice'] as num?)?.toStringAsFixed(0) ?? '0'}',
-                  style: TextStyle(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.bold,
-                    color: mainColor,
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(12),
+                height: 90,
+                width: 90,
+                child: CircleAvatar(
+                  backgroundColor: _statusColor(status).withOpacity(0.2),
+                  child: Icon(
+                    _statusIcon(status),
+                    color: _statusColor(status),
+                    size: 34,
                   ),
                 ),
-                Text(
-                  _statusLabel(status),
-                  style: styles(fontSize: 10.sp, color: _statusColor(status)),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            d['guestName'] ?? '-',
+                            style: styles(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          Spacer(),
+                          Text(
+                            '฿${(d['totalPrice'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.bold,
+                              color: mainColor,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      Row(
+                        children: [
+                          Text(
+                            '${d['roomName'] ?? '-'} • ${DateFormat('d MMM').format(checkIn)} • ${d['nights']} คืน',
+                            style: styles(
+                              fontSize: 12.sp,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          Spacer(),
+                          Text(
+                            _statusLabel(status),
+                            style: styles(
+                              fontSize: 12.sp,
+                              color: _statusColor(status),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       }).toList(),
@@ -584,7 +602,7 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
       case 'checked_in':
         return Colors.green;
       case 'completed':
-        return Colors.grey;
+        return mainColor;
       case 'cancelled':
         return Colors.red;
       default:

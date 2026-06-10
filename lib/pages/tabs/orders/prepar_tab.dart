@@ -1,6 +1,7 @@
 ﻿// ignore_for_file: avoid_print, use_build_context_synchronously, unnecessary_cast, unused_catch_stack, use_null_aware_elements, unused_local_variable
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -56,6 +57,12 @@ List<Map<String, dynamic>> _processItems(List itemsRaw) {
       icon: Icons.storefront_sharp,
       color: Colors.green.shade700,
       label: 'รอรับที่ร้าน',
+    );
+  } else if (serviceType == 'ecommerce') {
+    return (
+      icon: Icons.inventory_2_outlined,
+      color: Colors.blue.shade700,
+      label: 'Ecommerce',
     );
   } else if (serviceType == 'delivery') {
     return (icon: Icons.delivery_dining, color: Colors.orange, label: 'จัดส่ง');
@@ -124,6 +131,7 @@ class _PreparTabState extends State<PreparTab>
   final Map<String, Timer> _orderTimers = {};
   Set<String> _timerOrderIds = <String>{};
   final Map<String, int> _orderRetryCount = {};
+
   final Set<String> _shownDialogs = <String>{};
   final Set<String> _processedDeliveryOrders = <String>{};
   final Set<String> _processingOrders = <String>{};
@@ -158,6 +166,7 @@ class _PreparTabState extends State<PreparTab>
             'rider_accepted',
             'picked_up',
             'self_delivering',
+            'shipped',
           ],
         )
         .orderBy('timestamp')
@@ -260,7 +269,7 @@ class _PreparTabState extends State<PreparTab>
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.medium,
-            distanceFilter: 0,
+            distanceFilter: 20,
           ),
         ).listen((Position position) {
           currentPosition = position;
@@ -911,29 +920,31 @@ class _PreparTabState extends State<PreparTab>
       );
     }
     if (_cachedOrders.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.restaurant_menu_outlined,
-              size: 90.sp,
-              color: Colors.yellow.shade900,
-            ),
-            SizedBox(height: 20.h),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.w),
-              child: Text(
-                'รอออร์เดอร์ใหม่เข้ามานะครับ 🍕',
-                textAlign: TextAlign.center,
-                style: styles(
-                  fontSize: 20.sp,
-                  color: Colors.red,
-                  fontWeight: FontWeight.w500,
+      return SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.restaurant_menu_outlined,
+                size: 90.sp,
+                color: Colors.yellow.shade900,
+              ),
+              SizedBox(height: 20.h),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20.w),
+                child: Text(
+                  'รอออร์เดอร์ใหม่เข้ามานะครับ 🍕',
+                  textAlign: TextAlign.center,
+                  style: styles(
+                    fontSize: 20.sp,
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -941,35 +952,126 @@ class _PreparTabState extends State<PreparTab>
       stream: _unreadCountsStream,
       builder: (context, unreadSnapshot) {
         final unreadCountsMap = unreadSnapshot.data ?? {};
-        return ListView.builder(
+
+        final nonEcomDocs = _cachedOrders.where((doc) {
+          final d = doc.data() as Map<String, dynamic>? ?? {};
+          return (d['orderType'] as String?) != 'ecommerce';
+        }).toList();
+
+        final nearEcomDocs = _cachedOrders.where((doc) {
+          final d = doc.data() as Map<String, dynamic>? ?? {};
+          if ((d['orderType'] as String?) != 'ecommerce') return false;
+          final dist = (d['orderDistance'] as num?)?.toDouble();
+          return dist != null && dist <= 200;
+        }).toList();
+
+        final farEcomDocs = _cachedOrders.where((doc) {
+          final d = doc.data() as Map<String, dynamic>? ?? {};
+          if ((d['orderType'] as String?) != 'ecommerce') return false;
+          final dist = (d['orderDistance'] as num?)?.toDouble();
+          return dist == null || dist > 200;
+        }).toList();
+
+        OrderCard buildCard(DocumentSnapshot doc) {
+          final orderId = doc.id;
+          final orderData = doc.data() as Map<String, dynamic>? ?? {};
+          final buyerId = orderData['buyerId']?.toString() ?? '';
+          final unreadCount = unreadCountsMap['$buyerId-$orderId'] ?? 0;
+          final notifier = _cardNotifiers.putIfAbsent(
+            orderId,
+            () => ValueNotifier(doc),
+          );
+          return OrderCard(
+            key: ValueKey(orderId),
+            notifier: notifier,
+            unreadCount: unreadCount,
+            timerOrderIds: _timerOrderIds,
+            orderRetryCount: _orderRetryCount,
+            onMarkReady: markOrderReady,
+            onCompleteSelfDeliver: _completeSelfDeliverOrder,
+            onVendorSelfDeliver: _handleVendorSelfDeliver,
+            onAssignRider: _assignToNearestRider,
+            onStopTimer: _stopOrderTimer,
+            onStartTimer: _startOrderTimer,
+            onMarkChatsRead: _markChatsAsRead,
+            onCleanup: _cleanupOrder,
+          );
+        }
+
+        Widget sectionHeader({
+          required String label,
+          required int count,
+          required IconData icon,
+          required Color color,
+        }) {
+          return Container(
+            margin: EdgeInsets.symmetric(vertical: 10.h, horizontal: 4.w),
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+                width: 0.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 16.sp),
+                SizedBox(width: 8.w),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                SizedBox(width: 6.w),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 1.h),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView(
           physics: const BouncingScrollPhysics(),
-          itemCount: _cachedOrders.length,
-          itemBuilder: (context, index) {
-            final doc = _cachedOrders[index];
-            final orderId = doc.id;
-            final orderData = doc.data() as Map<String, dynamic>? ?? {};
-            final buyerId = orderData['buyerId']?.toString() ?? '';
-            final unreadCount = unreadCountsMap['$buyerId-$orderId'] ?? 0;
-            final notifier = _cardNotifiers.putIfAbsent(
-              orderId,
-              () => ValueNotifier(doc),
-            );
-            return OrderCard(
-              key: ValueKey(orderId),
-              notifier: notifier,
-              unreadCount: unreadCount,
-              timerOrderIds: _timerOrderIds,
-              orderRetryCount: _orderRetryCount,
-              onMarkReady: markOrderReady,
-              onCompleteSelfDeliver: _completeSelfDeliverOrder,
-              onVendorSelfDeliver: _handleVendorSelfDeliver,
-              onAssignRider: _assignToNearestRider,
-              onStopTimer: _stopOrderTimer,
-              onStartTimer: _startOrderTimer,
-              onMarkChatsRead: _markChatsAsRead,
-              onCleanup: _cleanupOrder,
-            );
-          },
+          padding: EdgeInsets.only(bottom: 16.h),
+          children: [
+            ...nonEcomDocs.map(buildCard),
+            if (nearEcomDocs.isNotEmpty) ...[
+              sectionHeader(
+                label: 'Ecommerce  10-200 กม.',
+                count: nearEcomDocs.length,
+                icon: Icons.near_me,
+                color: Colors.blue.shade700,
+              ),
+              ...nearEcomDocs.map(buildCard),
+            ],
+            if (farEcomDocs.isNotEmpty) ...[
+              sectionHeader(
+                label: 'Ecommerce  เกิน 200 กม.',
+                count: farEcomDocs.length,
+                icon: Icons.local_shipping,
+                color: Colors.orange.shade700,
+              ),
+              ...farEcomDocs.map(buildCard),
+            ],
+          ],
         );
       },
     );
@@ -1149,7 +1251,13 @@ class _OrderCardState extends State<OrderCard> {
     final String custEmail =
         bi['custemail'] as String? ?? orderData['custemail'] as String? ?? '';
     final serviceType = orderData['serviceType']?.toString() ?? 'pickup';
-    if (items.isEmpty) return const SizedBox.shrink();
+    final ecomStatus = orderData['status']?.toString() ?? '';
+    final bool isEcomActive =
+        serviceType == 'ecommerce' &&
+        (ecomStatus == 'paid' ||
+            ecomStatus == 'preparing' ||
+            ecomStatus == 'shipped');
+    if (items.isEmpty && !isEcomActive) return const SizedBox.shrink();
     final timestamp = orderData['timestamp'] as Timestamp? ?? Timestamp.now();
     final totalPrice = (orderData['totalPrice'] as num?)?.toDouble() ?? 0.0;
     final shippingCharge =
@@ -1260,7 +1368,8 @@ class _OrderCardState extends State<OrderCard> {
         backgroundColor: Colors.grey.shade100,
         collapsedIconColor: Colors.transparent,
         iconColor: Colors.transparent,
-        tilePadding: EdgeInsets.only(left: 8.w),
+        tilePadding: EdgeInsets.only(left: 8.w, right: 12.w),
+        showTrailingIcon: false,
         collapsedBackgroundColor: Colors.white,
         initiallyExpanded: _isExpanded,
         onExpansionChanged: (expanded) {
@@ -1289,6 +1398,173 @@ class _OrderCardState extends State<OrderCard> {
         children: expansionChildren,
       ),
     );
+  }
+
+  Future<void> _confirmEcommerceOrder(
+    String orderId,
+    Map<String, dynamic> orderData,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยันรับออเดอร์'),
+        content: const Text(
+          'ยืนยันรับออเดอร์ ecommerce นี้?\nหลังยืนยันจะเตรียมส่งของให้ลูกค้า',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ยืนยัน', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    EasyLoading.show(status: 'กำลังยืนยัน...');
+    try {
+      final items = List<Map<String, dynamic>>.from(
+        (orderData['items'] as List? ?? []).map(
+          (e) => Map<String, dynamic>.from(e as Map),
+        ),
+      );
+      for (final item in items) {
+        item['accepted'] = true;
+      }
+      final subtotal = items.fold<double>(
+        0.0,
+        (acc, item) =>
+            acc +
+            ((item['price'] as num? ?? 0).toDouble() *
+                (item['quantity'] as num? ?? 1).toInt()),
+      );
+      final double ecomShipping = (orderData['shippingFee'] as num? ?? 0)
+          .toDouble();
+      final double platformCommission = subtotal * 0.07;
+      final double vendorEarnings = subtotal - platformCommission;
+
+      await firestore.collection('orders').doc(orderId).update({
+        'status': 'preparing',
+        'items': items,
+        'totalPrice': subtotal + ecomShipping,
+        'vendorEarnings': vendorEarnings,
+        'platformCommission': platformCommission,
+        'preparingStartedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      EasyLoading.showSuccess('ยืนยันรับออเดอร์แล้ว');
+    } catch (e) {
+      EasyLoading.showError('ผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _handleShipped(String orderId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final vendorDoc = await FirebaseFirestore.instance
+        .collection('vendors')
+        .doc(uid)
+        .get();
+    final carrier = (vendorDoc.data()?['defaultCarrier'] as String?) ?? 'Kerry';
+
+    if (carrier.isEmpty) {
+      Fluttertoast.showToast(msg: 'กรุณาตั้งค่าขนส่งใน Settings ก่อน');
+      return;
+    }
+
+    final trackingController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยันการส่งของ'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(10.w),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6.r),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.local_shipping,
+                      color: Colors.blue[800],
+                      size: 18.sp,
+                    ),
+                    SizedBox(width: 8.w),
+                    Text(
+                      'ขนส่ง: $carrier',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[900],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 12.h),
+              TextField(
+                controller: trackingController,
+                decoration: const InputDecoration(
+                  labelText: 'หมายเลขพัสดุ (Tracking)',
+                  hintText: 'เช่น TH1234567890',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            onPressed: () {
+              if (trackingController.text.trim().isEmpty) {
+                Fluttertoast.showToast(msg: 'กรุณากรอกหมายเลขพัสดุ');
+                return;
+              }
+              Navigator.pop(ctx, true);
+            },
+            child: const Text(
+              'ยืนยันส่งแล้ว',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (result != true) return;
+
+    EasyLoading.show(status: 'กำลังบันทึก...');
+    try {
+      await firestore.collection('orders').doc(orderId).update({
+        'status': 'shipped',
+        'shippedAt': FieldValue.serverTimestamp(),
+        'trackingNumber': trackingController.text.trim(),
+        'shippingCarrier': carrier,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      EasyLoading.showSuccess('บันทึกการส่งแล้ว');
+    } catch (e) {
+      EasyLoading.showError('ผิดพลาด: $e');
+    }
   }
 
   Widget _buildStatusBadge(String text, Color color) => Text(
@@ -1579,6 +1855,28 @@ class _OrderCardState extends State<OrderCard> {
                       ),
                     ],
                   ),
+                  if (serviceType == 'ecommerce' &&
+                      orderData['orderDistance'] != null) ...[
+                    SizedBox(height: 2.h),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 13.sp,
+                          color: Colors.grey[600],
+                        ),
+                        SizedBox(width: 4.w),
+                        Text(
+                          'ระยะ: ${(orderData['orderDistance'] as num).toStringAsFixed(1)} กม.',
+                          style: TextStyle(
+                            fontSize: 11.sp,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1652,114 +1950,225 @@ class _OrderCardState extends State<OrderCard> {
           ],
 
           SizedBox(height: 16.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _selectedToCancel.isEmpty
-                  ? InkWell(
-                      onTap: () => _cancelSelectedItems(orderId),
-                      child: CircleAvatar(
-                        radius: 20.r,
-                        backgroundColor: Colors.red,
-                        child: Icon(
-                          Icons.delete_outline_rounded,
+          if (serviceType == 'ecommerce') ...[
+            Builder(
+              builder: (context) {
+                final eStatus = orderDataMap['status']?.toString() ?? '';
+                if (eStatus == 'paid') {
+                  return Center(
+                    child: SizedBox(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(
+                          Icons.check_circle,
                           color: Colors.white,
-                          size: 26.r,
                         ),
-                      ),
-                    )
-                  : InkWell(
-                      onTap: () => _cancelSelectedItems(orderId),
-                      child: CircleAvatar(
-                        radius: 20.r,
-                        backgroundColor: Colors.red,
-                        child: Icon(Icons.close, color: Colors.white),
+                        label: Text(
+                          'รับออเดอร์',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.sp,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: EdgeInsets.symmetric(
+                            vertical: 2.h,
+                            horizontal: 10.w,
+                          ),
+                        ),
+                        onPressed: () =>
+                            _confirmEcommerceOrder(orderId, orderDataMap),
                       ),
                     ),
-              if (isCashPending)
-                InkWell(
-                  onTap: () => _notifyCustomerReady(orderId, orderDataMap),
-                  child: CircleAvatar(
-                    radius: 20.r,
-                    backgroundColor: Colors.orange,
-                    child: Icon(
-                      Icons.notifications_active,
-                      color: Colors.white,
-                      size: 26.sp,
+                  );
+                }
+                if (eStatus == 'preparing') {
+                  return Center(
+                    child: SizedBox(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(
+                          Icons.local_shipping,
+                          color: Colors.white,
+                        ),
+                        label: Text(
+                          'ส่งแล้ว',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.sp,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: EdgeInsets.symmetric(
+                            vertical: 2.h,
+                            horizontal: 10.w,
+                          ),
+                        ),
+                        onPressed: () => _handleShipped(orderId),
+                      ),
+                    ),
+                  );
+                } else if (eStatus == 'shipped') {
+                  return Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(10.w),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_shipping,
+                              color: Colors.orange[800],
+                              size: 16.sp,
+                            ),
+                            SizedBox(width: 6.w),
+                            Text(
+                              'ส่งแล้ว — รอลูกค้ายืนยัน',
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange[900],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if ((orderDataMap['trackingNumber'] as String?)
+                                ?.isNotEmpty ??
+                            false) ...[
+                          SizedBox(height: 4.h),
+                          Text(
+                            'พัสดุ: ${orderDataMap['shippingCarrier'] ?? '-'} | ${orderDataMap['trackingNumber']}',
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ] else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _selectedToCancel.isEmpty
+                    ? InkWell(
+                        onTap: () => _cancelSelectedItems(orderId),
+                        child: CircleAvatar(
+                          radius: 20.r,
+                          backgroundColor: Colors.red,
+                          child: Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.white,
+                            size: 26.r,
+                          ),
+                        ),
+                      )
+                    : InkWell(
+                        onTap: () => _cancelSelectedItems(orderId),
+                        child: CircleAvatar(
+                          radius: 20.r,
+                          backgroundColor: Colors.red,
+                          child: Icon(Icons.close, color: Colors.white),
+                        ),
+                      ),
+                if (isCashPending)
+                  InkWell(
+                    onTap: () => _notifyCustomerReady(orderId, orderDataMap),
+                    child: CircleAvatar(
+                      radius: 20.r,
+                      backgroundColor: Colors.orange,
+                      child: Icon(
+                        Icons.notifications_active,
+                        color: Colors.white,
+                        size: 26.sp,
+                      ),
                     ),
                   ),
-                ),
-              isCashPending
-                  ? InkWell(
-                      onTap: () => CashPaymentHelper.showCashPaymentDialog(
-                        context,
-                        orderId,
-                        orderDataMap,
-                        totalPrice,
-                      ),
-                      child: CircleAvatar(
-                        radius: 20.r,
-                        backgroundColor: Colors.amber,
-                        child: Icon(
-                          Icons.calculate,
-                          color: Colors.white,
-                          size: 26.sp,
+                isCashPending
+                    ? InkWell(
+                        onTap: () => CashPaymentHelper.showCashPaymentDialog(
+                          context,
+                          orderId,
+                          orderDataMap,
+                          totalPrice,
                         ),
-                      ),
-                    )
-                  : InkWell(
-                      onTap: serviceType == 'delivery' && !isSelfDeliver
-                          ? () {
-                              final Map<String, dynamic> vi =
-                                  (orderDataMap['vendorInfo']
-                                      as Map<String, dynamic>?) ??
-                                  {};
-                              final GeoPoint? vGeo =
-                                  vi['vendorLocation'] as GeoPoint? ??
-                                  orderDataMap['vendorLocation'] as GeoPoint?;
-                              widget.onMarkReady(
+                        child: CircleAvatar(
+                          radius: 20.r,
+                          backgroundColor: Colors.amber,
+                          child: Icon(
+                            Icons.calculate,
+                            color: Colors.white,
+                            size: 26.sp,
+                          ),
+                        ),
+                      )
+                    : InkWell(
+                        onTap: serviceType == 'delivery' && !isSelfDeliver
+                            ? () {
+                                final Map<String, dynamic> vi =
+                                    (orderDataMap['vendorInfo']
+                                        as Map<String, dynamic>?) ??
+                                    {};
+                                final GeoPoint? vGeo =
+                                    vi['vendorLocation'] as GeoPoint? ??
+                                    orderDataMap['vendorLocation'] as GeoPoint?;
+                                widget.onMarkReady(
+                                  orderId,
+                                  itemsList,
+                                  vGeo?.latitude ?? 0.0,
+                                  vGeo?.longitude ?? 0.0,
+                                  shippingCharge,
+                                  subTotal,
+                                );
+                              }
+                            : () async => await widget.onCompleteSelfDeliver(
                                 orderId,
                                 itemsList,
-                                vGeo?.latitude ?? 0.0,
-                                vGeo?.longitude ?? 0.0,
-                                shippingCharge,
-                                subTotal,
-                              );
-                            }
-                          : () async => await widget.onCompleteSelfDeliver(
-                              orderId,
-                              itemsList,
-                              serviceType,
-                              originalShippingCharge,
-                            ),
-                      child: CircleAvatar(
-                        radius: 20.r,
-                        backgroundColor: Colors.green,
-                        child: Icon(
-                          serviceType == 'delivery' && !isSelfDeliver
-                              ? Icons.delivery_dining
-                              : Icons.check_box_outlined,
-                          color: Colors.white,
-                          size: 26.sp,
+                                serviceType,
+                                originalShippingCharge,
+                              ),
+                        child: CircleAvatar(
+                          radius: 20.r,
+                          backgroundColor: Colors.green,
+                          child: Icon(
+                            serviceType == 'delivery' && !isSelfDeliver
+                                ? Icons.delivery_dining
+                                : Icons.check_box_outlined,
+                            color: Colors.white,
+                            size: 26.sp,
+                          ),
                         ),
                       ),
-                    ),
-              isSelfDeliver && serviceType == 'delivery'
-                  ? InkWell(
-                      onTap: () =>
-                          _selfDeliveryNavigationDialog(context, orderDataMap),
-                      child: CircleAvatar(
-                        radius: 20.r,
-                        backgroundColor: Colors.blue,
-                        child: Icon(
-                          Icons.navigation_outlined,
-                          color: Colors.white,
+                isSelfDeliver && serviceType == 'delivery'
+                    ? InkWell(
+                        onTap: () => _selfDeliveryNavigationDialog(
+                          context,
+                          orderDataMap,
                         ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ],
-          ),
+                        child: CircleAvatar(
+                          radius: 20.r,
+                          backgroundColor: Colors.blue,
+                          child: Icon(
+                            Icons.navigation_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ],
+            ),
+          ],
         ],
       ),
     );

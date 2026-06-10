@@ -3,6 +3,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -13,7 +14,6 @@ import 'package:colae_shop/pages/tabs/settings/logout.dart';
 import 'package:colae_shop/pages/main_vendor_page.dart';
 import 'package:colae_shop/pages/tabs/settings/table_qr_page.dart';
 import 'package:colae_shop/services/sevice.dart';
-import 'package:colae_shop/pages/mode_selector_page.dart';
 import 'package:colae_shop/widgets/button_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:colae_shop/widgets/time_selector_widget.dart';
@@ -44,15 +44,120 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
   bool _isTemporarilyClosed = false;
   late Stream<DocumentSnapshot> _vendorStream;
 
+  String _defaultCarrier = 'Kerry';
+  final TextEditingController _customCarrierController =
+      TextEditingController();
+  final List<String> _carriers = [
+    'Kerry',
+    'Flash',
+    'J&T',
+    'Thai Post',
+    'อื่นๆ',
+  ];
+
+  String _promptpayType = 'phone';
+  final TextEditingController _promptpayNumberController =
+      TextEditingController();
+  final TextEditingController _promptpayNameController =
+      TextEditingController();
+
   @override
   void initState() {
     super.initState();
     final uid = _auth.currentUser!.uid;
     _vendorStream = _firestore.collection('vendors').doc(uid).snapshots();
+    _loadCarrier();
+  }
+
+  Future<void> _loadCarrier() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await _firestore.collection('vendors').doc(uid).get();
+    if (!doc.exists || !mounted) return;
+    final data = doc.data() ?? {};
+    final saved = data['defaultCarrier'] as String? ?? 'Kerry';
+    final pp = (data['promptpay'] as Map<String, dynamic>?) ?? {};
+    setState(() {
+      if (_carriers.contains(saved)) {
+        _defaultCarrier = saved;
+      } else {
+        _defaultCarrier = 'อื่นๆ';
+        _customCarrierController.text = saved;
+      }
+      _promptpayType = pp['type'] as String? ?? 'phone';
+      _promptpayNumberController.text = pp['number'] as String? ?? '';
+      _promptpayNameController.text = pp['accountName'] as String? ?? '';
+    });
+  }
+
+  Future<void> _saveCarrier() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final carrierToSave = _defaultCarrier == 'อื่นๆ'
+        ? _customCarrierController.text.trim()
+        : _defaultCarrier;
+    if (carrierToSave.isEmpty) return;
+    try {
+      await _firestore.collection('vendors').doc(uid).update({
+        'defaultCarrier': carrierToSave,
+        'customCarrier': _defaultCarrier == 'อื่นๆ'
+            ? _customCarrierController.text.trim()
+            : '',
+      });
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'บันทึกผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _savePromptpay() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    final number = _promptpayNumberController.text.trim();
+    final name = _promptpayNameController.text.trim();
+
+    if (number.isEmpty) {
+      Fluttertoast.showToast(msg: 'กรุณากรอกหมายเลข PromptPay');
+      return;
+    }
+    if (_promptpayType == 'phone' && number.length != 10) {
+      Fluttertoast.showToast(msg: 'เบอร์โทรต้องมี 10 หลัก');
+      return;
+    }
+    if (_promptpayType == 'national_id' && number.length != 13) {
+      Fluttertoast.showToast(msg: 'เลขบัตรประชาชนต้องมี 13 หลัก');
+      return;
+    }
+    if (!RegExp(r'^\d+$').hasMatch(number)) {
+      Fluttertoast.showToast(msg: 'หมายเลขต้องเป็นตัวเลขเท่านั้น');
+      return;
+    }
+    if (name.isEmpty) {
+      Fluttertoast.showToast(msg: 'กรุณากรอกชื่อบัญชี');
+      return;
+    }
+
+    EasyLoading.show(status: 'กำลังบันทึก...');
+    try {
+      await _firestore.collection('vendors').doc(uid).update({
+        'promptpay': {
+          'type': _promptpayType,
+          'number': number,
+          'accountName': name,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      });
+      EasyLoading.showSuccess('บันทึกบัญชี PromptPay แล้ว');
+    } catch (e) {
+      EasyLoading.showError('ผิดพลาด: $e');
+    }
   }
 
   @override
   void dispose() {
+    _customCarrierController.dispose();
+    _promptpayNumberController.dispose();
+    _promptpayNameController.dispose();
     super.dispose();
   }
 
@@ -248,12 +353,9 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(height * 0.04.sp),
+        preferredSize: Size.fromHeight(height * 0.05.sp),
         child: ClipRRect(
-          borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(12.0),
-            bottomRight: Radius.circular(12.0),
-          ),
+          borderRadius: BorderRadius.circular(12.r),
           child: AppBar(
             leading: Padding(
               padding: EdgeInsets.only(left: 12.0.w),
@@ -334,6 +436,47 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                SizedBox(height: 12.h),
+
+                DropdownButtonFormField<String>(
+                  initialValue: _defaultCarrier,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'ขนส่ง Ecommerce',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _carriers
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(
+                            c,
+                            style: styles(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() => _defaultCarrier = v ?? 'Kerry');
+                    _saveCarrier();
+                  },
+                ),
+                if (_defaultCarrier == 'อื่นๆ') ...[
+                  SizedBox(height: 8.h),
+                  TextField(
+                    controller: _customCarrierController,
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อขนส่ง',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => _saveCarrier(),
+                  ),
+                ],
+
+                SizedBox(height: 16.h),
                 ..._days.asMap().entries.map((entry) {
                   final index = entry.key;
                   final shortDay = entry.value; // 'Mon'
@@ -361,100 +504,82 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
                     ),
                   );
                 }),
-                SizedBox(height: 8.h),
-                ListTile(
-                  leading: const Icon(Icons.swap_horiz, color: Colors.blue),
-                  title: Text('เปลี่ยนบริการ', style: styles(fontSize: 16.sp)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.remove('vendor_last_mode');
-                    if (!context.mounted) return;
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ModeSelectorPage(),
-                      ),
-                      (route) => false,
-                    );
-                  },
+                SizedBox(height: 30.h),
+                Padding(
+                  padding: EdgeInsetsGeometry.only(
+                    left: 20.w,
+                    right: 20.w,
+                    top: 12.h,
+                    bottom: 12.h,
+                  ),
+                  child: ButtonWidget(
+                    label: 'บันทึก',
+                    style: styles(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    icon: Icons.save,
+                    press: _saveHours,
+                    color: mainColor,
+                    height: 50.h,
+                  ),
                 ),
+
+                SizedBox(height: 70.h),
               ],
             ),
           );
         },
       ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsetsGeometry.only(
-          left: 20.w,
-          right: 20.w,
-          top: 12.h,
-          bottom: MediaQuery.of(context).viewPadding.bottom + 12.h,
-        ),
-        child: ButtonWidget(
-          label: 'บันทึก',
-          style: styles(
-            fontSize: 14.sp,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-          icon: Icons.save,
-          press: _saveHours,
-          color: mainColor,
-          height: 50.h,
-        ),
-      ),
 
-      floatingActionButton: Align(
-        alignment: Alignment(1, 1.05),
-        child: FloatingActionButton(
-          heroTag: 'table qr ',
-          backgroundColor: mainColor,
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'table qr ',
+        backgroundColor: mainColor,
 
-          child: Icon(
-            Icons.table_restaurant_rounded,
-            color: Colors.white,
-            size: 35.r,
-          ),
-          onPressed: () async {
-            final user = FirebaseAuth.instance.currentUser;
-            if (user == null) {
-              Fluttertoast.showToast(msg: 'กรุณา login ก่อน');
+        child: Icon(
+          Icons.table_restaurant_rounded,
+          color: Colors.white,
+          size: 35.r,
+        ),
+        onPressed: () async {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null) {
+            Fluttertoast.showToast(msg: 'กรุณา login ก่อน');
+            return;
+          }
+
+          try {
+            final vendorDoc = await FirebaseFirestore.instance
+                .collection('vendors')
+                .doc(user.uid)
+                .get();
+
+            if (!vendorDoc.exists) {
+              Fluttertoast.showToast(
+                msg: 'ไม่พบข้อมูลร้านค้า กรุณาตั้งค่าโปรไฟล์',
+              );
               return;
             }
 
-            try {
-              final vendorDoc = await FirebaseFirestore.instance
-                  .collection('vendors')
-                  .doc(user.uid)
-                  .get();
+            final vendorData = vendorDoc.data() as Map<String, dynamic>;
 
-              if (!vendorDoc.exists) {
-                Fluttertoast.showToast(
-                  msg: 'ไม่พบข้อมูลร้านค้า กรุณาตั้งค่าโปรไฟล์',
-                );
-                return;
-              }
-
-              final vendorData = vendorDoc.data() as Map<String, dynamic>;
-
-              final String restaurantId = user.uid;
-              final String restaurantName =
-                  vendorData['bussinessName'] ?? 'ร้านไม่มีชื่อ';
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TableQRGeneratorPage(
-                    restaurantId: restaurantId,
-                    restaurantName: restaurantName,
-                  ),
+            final String restaurantId = user.uid;
+            final String restaurantName =
+                vendorData['bussinessName'] ?? 'ร้านไม่มีชื่อ';
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TableQRGeneratorPage(
+                  restaurantId: restaurantId,
+                  restaurantName: restaurantName,
                 ),
-              );
-            } catch (e) {
-              Fluttertoast.showToast(msg: 'เกิดข้อผิดพลาดในการดึงข้อมูล: $e');
-            }
-          },
-        ),
+              ),
+            );
+          } catch (e) {
+            Fluttertoast.showToast(msg: 'เกิดข้อผิดพลาดในการดึงข้อมูล: $e');
+          }
+        },
       ),
     );
   }

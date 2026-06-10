@@ -49,6 +49,7 @@ dependencies:
   cached_network_image: ^3.4.1
   cloud_functions: ^6.0.6
   share_plus: ^10.1.0
+  app_links: ^6.3.2
   promptpay_qrcode_generate: ^1.0.2
   screenshot: ^3.0.0
   flutter_cache_manager: ^3.4.1
@@ -58,6 +59,7 @@ dependencies:
   thai_address_picker: ^1.0.4
   flutter_riverpod: ^2.6.1
   table_calendar: ^3.1.2
+  mobile_scanner: ^5.2.3
 dependency_overrides:
   camera_android_camerax: 0.6.9+1
 dev_dependencies:

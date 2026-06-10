@@ -498,6 +498,15 @@ class _PreparInfoWidgetState extends State<PreparInfoWidget>
             updates['shippingCharge'] = 0.0;
             updates['deliveredAt'] = approveTime;
             _orderDeliveredInTransaction = true;
+          } else if (serviceType == 'ecommerce') {
+            // ecommerce: ยืนยันครบ → preparing (รอ vendor แพ็คและส่งของ)
+            final double ecomShipping =
+                (data['shippingFee'] as num? ?? 0).toDouble();
+            final double ecomSubsidy = acceptedSubTotal * 0.07;
+            updates['status'] = 'preparing';
+            updates['totalPrice'] = acceptedSubTotal + ecomShipping;
+            updates['vendorEarnings'] = acceptedSubTotal - ecomSubsidy;
+            updates['platformCommission'] = ecomSubsidy;
           } else if (serviceType == 'delivery') {
             final bool isSelfDeliver = data['selfDeliver'] ?? false;
 
@@ -591,6 +600,14 @@ class _PreparInfoWidgetState extends State<PreparInfoWidget>
                   acceptedSubTotal - cancelPickupSubsidy;
               updates['platformCommission'] = (cancelPickupSubsidy - 30.0)
                   .clamp(0.0, double.infinity);
+            } else if (serviceType == 'ecommerce') {
+              final double ecomShipping =
+                  (data['shippingFee'] as num? ?? 0).toDouble();
+              final double ecomSubsidy = acceptedSubTotal * 0.07;
+              updates['status'] = 'preparing';
+              updates['totalPrice'] = acceptedSubTotal + ecomShipping;
+              updates['vendorEarnings'] = acceptedSubTotal - ecomSubsidy;
+              updates['platformCommission'] = ecomSubsidy;
             } else if (serviceType == 'delivery') {
               final bool isSelfDeliver = data['selfDeliver'] ?? false;
               if (isSelfDeliver) {

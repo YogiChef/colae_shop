@@ -1,4 +1,4 @@
-// ignore_for_file: depend_on_referenced_packages, no_leading_underscores_for_local_identifiers, deprecated_member_use
+// ignore_for_file: depend_on_referenced_packages, no_leading_underscores_for_local_identifiers, deprecated_member_use, unnecessary_cast
 
 import 'dart:io';
 
@@ -14,20 +14,22 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colae_shop/pages/tabs/upload/barcode_scanner_page.dart';
 import 'package:colae_shop/pages/tabs/upload/type.dart';
 import 'package:colae_shop/providers/product_provider.dart';
 import 'package:colae_shop/services/sevice.dart';
 import 'package:colae_shop/widgets/button_widget.dart';
 import 'package:colae_shop/widgets/input_textfield.dart';
 
-class GeneralTab extends StatefulWidget {
-  const GeneralTab({super.key});
+class GeneralUpload extends StatefulWidget {
+  const GeneralUpload({super.key});
 
   @override
-  State<GeneralTab> createState() => _GeneralTabState();
+  State<GeneralUpload> createState() => _GeneralUploadState();
 }
 
-class _GeneralTabState extends State<GeneralTab>
+class _GeneralUploadState extends State<GeneralUpload>
     with AutomaticKeepAliveClientMixin {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -40,6 +42,82 @@ class _GeneralTabState extends State<GeneralTab>
   bool? _chargeShipping = false;
   DateTime? _scheduleDate;
   final TextEditingController _shippingController = TextEditingController();
+  String _saleMode = 'delivery';
+  List<Map<String, TextEditingController>> _tierControllers = [];
+  final TextEditingController _extraBaseController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _extraPerUnitController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _shippingNoteController = TextEditingController();
+  String? _scannedBarcode;
+  String? _selectedType;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _qtyController = TextEditingController();
+  final TextEditingController _descController = TextEditingController();
+
+  // Package
+  String _selectedPackage = 'ห่อ';
+  final TextEditingController _customPackageController =
+      TextEditingController();
+  final TextEditingController _packageQtyController = TextEditingController(
+    text: '1',
+  );
+  final List<String> _packageOptions = [
+    'ห่อ',
+    'กล่อง',
+    'ขวด',
+    'ถุง',
+    'กระป๋อง',
+    'แพ็ค',
+    'ลัง',
+    'ปี๊ป',
+    'กระสอบ',
+    'อื่นๆ',
+  ];
+
+  // Unit
+  String _selectedUnit = 'กรัม';
+  final TextEditingController _customUnitController = TextEditingController();
+  final TextEditingController _unitSizeController = TextEditingController();
+  final List<String> _unitOptions = [
+    'กรัม',
+    'กก.',
+    'มล.',
+    'ลิตร',
+    'ชิ้น',
+    'ลูก',
+    'เม็ด',
+    'อื่นๆ',
+  ];
+
+  void _addTier({
+    int qtyFrom = 1,
+    int qtyTo = 5,
+    double fee = 0,
+    bool rebuild = true,
+  }) {
+    final entry = {
+      'qtyFrom': TextEditingController(text: qtyFrom.toString()),
+      'qtyTo': TextEditingController(text: qtyTo.toString()),
+      'fee': TextEditingController(text: fee.toStringAsFixed(0)),
+    };
+    if (rebuild) {
+      setState(() => _tierControllers.add(entry));
+    } else {
+      _tierControllers.add(entry);
+    }
+  }
+
+  void _removeTier(int index) {
+    final tier = _tierControllers[index];
+    tier['qtyFrom']?.dispose();
+    tier['qtyTo']?.dispose();
+    tier['fee']?.dispose();
+    setState(() => _tierControllers.removeAt(index));
+  }
 
   Future<void> getType() async {
     final snapshot = await firestore.collection('type').get();
@@ -223,9 +301,118 @@ class _GeneralTabState extends State<GeneralTab>
   }
 
   @override
+  void dispose() {
+    for (final tier in _tierControllers) {
+      tier['qtyFrom']?.dispose();
+      tier['qtyTo']?.dispose();
+      tier['fee']?.dispose();
+    }
+    _extraBaseController.dispose();
+    _extraPerUnitController.dispose();
+    _shippingNoteController.dispose();
+    _nameController.dispose();
+    _priceController.dispose();
+    _qtyController.dispose();
+    _descController.dispose();
+    _customPackageController.dispose();
+    _packageQtyController.dispose();
+    _customUnitController.dispose();
+    _unitSizeController.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
-    getType();
     super.initState();
+    _tierControllers = [];
+    _addTier(qtyFrom: 1, qtyTo: 9, fee: 0, rebuild: false);
+    getType();
+  }
+
+  Future<void> _openBarcodeScanner() async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
+    );
+
+    if (result == null || result.isEmpty || !mounted) return;
+
+    setState(() => _scannedBarcode = result);
+
+    EasyLoading.show(status: 'กำลังค้นหา...');
+    try {
+      final doc = await firestore
+          .collection('products_master')
+          .doc(result)
+          .get();
+      EasyLoading.dismiss();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>? ?? {};
+        _autoFillFromMaster(data, result);
+        Fluttertoast.showToast(
+          msg: 'พบสินค้า: ${data['proName'] ?? '-'}',
+          backgroundColor: Colors.green,
+          toastLength: Toast.LENGTH_SHORT,
+        );
+      } else {
+        Fluttertoast.showToast(
+          msg: 'ไม่พบสินค้า — กรุณากรอกข้อมูลเอง\nบาร์โค้ด: $result',
+          backgroundColor: Colors.orange,
+          toastLength: Toast.LENGTH_LONG,
+        );
+      }
+    } catch (e) {
+      EasyLoading.dismiss();
+      EasyLoading.showError('ผิดพลาด: $e');
+    }
+  }
+
+  void _autoFillFromMaster(Map<String, dynamic> data, String barcode) {
+    final provider = Provider.of<ProductProvider>(context, listen: false);
+    final name = data['proName']?.toString() ?? '';
+    final desc = data['description']?.toString() ?? '';
+    final type = data['type']?.toString();
+
+    if (name.isNotEmpty) {
+      _nameController.text = name;
+      provider.getFormData(productName: name, notify: false);
+    }
+    if (desc.isNotEmpty) {
+      _descController.text = desc;
+      provider.getFormData(description: desc, notify: false);
+    }
+    setState(() {
+      _scannedBarcode = barcode;
+      if (type != null && _categoryList.contains(type)) {
+        _selectedType = type;
+        provider.getFormData(type: type, notify: false);
+      }
+
+      final pkg = data['package']?.toString() ?? '';
+      if (pkg.isNotEmpty) {
+        if (_packageOptions.contains(pkg)) {
+          _selectedPackage = pkg;
+        } else {
+          _selectedPackage = 'อื่นๆ';
+          _customPackageController.text = pkg;
+        }
+      }
+      _packageQtyController.text = (data['packageQty'] ?? 1).toString();
+
+      final unit = data['unit']?.toString() ?? '';
+      if (unit.isNotEmpty) {
+        if (_unitOptions.contains(unit)) {
+          _selectedUnit = unit;
+        } else {
+          _selectedUnit = 'อื่นๆ';
+          _customUnitController.text = unit;
+        }
+      }
+      _unitSizeController.text = (data['unitSize'] ?? '').toString();
+    });
+    provider.getFormData();
+    Fluttertoast.showToast(msg: 'กรุณาตั้งราคาขายและจำนวนสินค้าของร้าน');
   }
 
   String formatedDate(DateTime date) {
@@ -267,7 +454,15 @@ class _GeneralTabState extends State<GeneralTab>
                       itemBuilder: (context, index) {
                         return index == 0
                             ? Material(
-                                elevation: 10,
+                                elevation: 0,
+                                color: Colors.white24,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(7.r),
+                                  side: BorderSide(
+                                    color: Colors.grey.shade400,
+                                    width: 1,
+                                  ),
+                                ),
                                 child: Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -289,6 +484,7 @@ class _GeneralTabState extends State<GeneralTab>
                                         style: GoogleFonts.righteous(
                                           fontSize: 14.sp,
                                           color: Colors.grey,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
@@ -326,12 +522,53 @@ class _GeneralTabState extends State<GeneralTab>
                       },
                     ),
                     SizedBox(height: 20.h),
+                    SizedBox(
+                      width: double.infinity,
+                      child: GestureDetector(
+                        onTap: _openBarcodeScanner,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(vertical: 12.h),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey.shade400,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Icon(
+                                Icons.qr_code_scanner,
+                                color: Colors.black54,
+                                size: 18.sp,
+                              ),
+                              SizedBox(width: 8.w),
+                              Text(
+                                _scannedBarcode != null
+                                    ? '$_scannedBarcode '
+                                    : 'สแกนบาร์โค้ด',
+                                style: TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 13.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
                     DropdownButtonFormField<String>(
                       isExpanded: true,
+                      value: _selectedType,
                       padding: EdgeInsets.only(
                         left: 20.w,
                         right: 20.w,
-                        bottom: 4.w,
+                        top: 4.h,
+                        bottom: 4.h,
                       ),
                       icon: const Icon(Icons.keyboard_arrow_down),
                       decoration: InputDecoration(
@@ -362,10 +599,14 @@ class _GeneralTabState extends State<GeneralTab>
                         style: styles(fontSize: 12.sp),
                       ),
                       items: _categoryList.map<DropdownMenuItem<String>>((e) {
-                        return DropdownMenuItem(value: e, child: Text(e));
+                        return DropdownMenuItem(
+                          value: e,
+                          child: Text(e, style: styles(fontSize: 12.sp)),
+                        );
                       }).toList(),
                       onChanged: (value) {
                         if (value != null) {
+                          setState(() => _selectedType = value);
                           provider.getFormData(type: value);
                         }
                       },
@@ -376,6 +617,7 @@ class _GeneralTabState extends State<GeneralTab>
                       textInputType: TextInputType.text,
                       prefixIcon: const Icon(Icons.drive_file_rename_outline),
                       hintText: 'ชื่อสินค้า',
+                      controller: _nameController,
                       validator: (value) {
                         if (value!.isEmpty) {
                           return 'Please enter product name';
@@ -391,6 +633,7 @@ class _GeneralTabState extends State<GeneralTab>
                       textInputType: TextInputType.number,
                       prefixIcon: const Icon(Icons.money_sharp),
                       hintText: 'ราคาสินค้า',
+                      controller: _priceController,
                       validator: (value) {
                         if (value!.isEmpty) {
                           return 'Please enter product price';
@@ -407,10 +650,194 @@ class _GeneralTabState extends State<GeneralTab>
                         );
                       },
                     ),
+                    if (_scannedBarcode != null) ...[
+                      SizedBox(height: 16.h),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_2,
+                            size: 16.sp,
+                            color: Colors.grey[700],
+                          ),
+                          SizedBox(width: 6.w),
+                          Text(
+                            'หน่วยบรรจุ',
+                            style: TextStyle(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8.h),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20.w),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedPackage,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  labelText: 'แบบ',
+                                  border: const UnderlineInputBorder(),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: mainColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                items: _packageOptions
+                                    .map(
+                                      (p) => DropdownMenuItem(
+                                        value: p,
+                                        child: Text(p),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) {
+                                  setState(() => _selectedPackage = v ?? 'ห่อ');
+                                },
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: _packageQtyController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'จำนวน',
+                                  hintText: '1',
+                                  border: UnderlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_selectedPackage == 'อื่นๆ') ...[
+                        SizedBox(height: 8.h),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20.w),
+                          child: TextField(
+                            controller: _customPackageController,
+                            decoration: InputDecoration(
+                              labelText: 'ระบุหน่วยบรรจุ',
+                              hintText: 'เช่น แพ็คคู่ / โหล',
+                              border: const UnderlineInputBorder(),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: mainColor,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: 16.h),
+                      // ปริมาณ section
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.scale_outlined,
+                            size: 16.sp,
+                            color: Colors.grey[700],
+                          ),
+                          SizedBox(width: 6.w),
+                          Text(
+                            'ปริมาณ',
+                            style: TextStyle(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8.h),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20.w),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: _unitSizeController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                decoration: const InputDecoration(
+                                  labelText: 'ขนาด',
+                                  hintText: '60',
+                                  border: UnderlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedUnit,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  labelText: 'หน่วย',
+                                  border: const UnderlineInputBorder(),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: mainColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                items: _unitOptions
+                                    .map(
+                                      (u) => DropdownMenuItem(
+                                        value: u,
+                                        child: Text(u),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) {
+                                  setState(() => _selectedUnit = v ?? 'กรัม');
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_selectedUnit == 'อื่นๆ') ...[
+                        SizedBox(height: 8.h),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20.w),
+                          child: TextField(
+                            controller: _customUnitController,
+                            decoration: InputDecoration(
+                              labelText: 'ระบุหน่วย',
+                              hintText: 'เช่น ออนซ์ / แก้ว',
+                              border: const UnderlineInputBorder(),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: mainColor,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                    SizedBox(height: 12.h),
                     InputTextfield(
                       textInputType: TextInputType.number,
                       prefixIcon: const Icon(Icons.qr_code),
                       hintText: 'จำนวน',
+                      controller: _qtyController,
                       validator: (value) {
                         if (value!.isEmpty) {
                           return 'Please enter product quantity';
@@ -426,9 +853,10 @@ class _GeneralTabState extends State<GeneralTab>
                       },
                     ),
                     TextFormField(
+                      controller: _descController,
                       keyboardType: TextInputType.text,
                       maxLength: 400,
-                      maxLines: 3,
+                      maxLines: 2,
                       validator: (value) {
                         if (value!.isEmpty) {
                           return 'Please enter product description';
@@ -660,6 +1088,215 @@ class _GeneralTabState extends State<GeneralTab>
                         ),
                       ),
 
+                    SizedBox(height: 12.h),
+                    DropdownButtonFormField<String>(
+                      value: _saleMode,
+                      isExpanded: true,
+                      padding: EdgeInsets.zero,
+                      decoration: InputDecoration(
+                        labelText: 'รูปแบบสินค้า',
+                        border: const UnderlineInputBorder(),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: mainColor, width: 2),
+                        ),
+                        contentPadding: EdgeInsets.symmetric(vertical: 8.h),
+                        helperText: 'ส่งใกล้ร้าน,ส่งทั่วประเทศ',
+                        helperMaxLines: 2,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'delivery',
+                          child: Text(
+                            '🛵 Delivery',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        DropdownMenuItem(
+                          value: 'ecommerce',
+                          child: Text(
+                            '📦 Ecommerce',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        setState(() => _saleMode = v ?? 'delivery');
+                      },
+                    ),
+                    if (_saleMode == 'ecommerce') ...[
+                      SizedBox(height: 12.h),
+                      Text(
+                        'ค่าส่ง ขั้นบันได',
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      SizedBox(height: 20.h),
+                      ...List.generate(_tierControllers.length, (i) {
+                        final tier = _tierControllers[i];
+                        return Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8.r),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: tier['qtyFrom'],
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'จาก',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 20.w,
+                                      vertical: 12.h,
+                                    ),
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+
+                              Expanded(
+                                child: TextField(
+                                  controller: tier['qtyTo'],
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'ถึง',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 20.w,
+                                      vertical: 12.h,
+                                    ),
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Text('ชิ้น =', style: TextStyle(fontSize: 12.sp)),
+                              SizedBox(width: 8.w),
+                              Expanded(
+                                child: TextField(
+                                  controller: tier['fee'],
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: '฿',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 20.w,
+                                      vertical: 12.h,
+                                    ),
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                              if (_tierControllers.length > 1)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                    size: 20.sp,
+                                  ),
+                                  onPressed: () => _removeTier(i),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
+                      TextButton.icon(
+                        icon: Icon(Icons.add_circle_outline, color: mainColor),
+                        label: Text(
+                          'เพิ่มขั้น',
+                          style: styles(color: mainColor),
+                        ),
+                        onPressed: () {
+                          final lastTo =
+                              int.tryParse(
+                                _tierControllers.last['qtyTo']?.text ?? '5',
+                              ) ??
+                              5;
+                          if (lastTo == 9) {
+                            _tierControllers.last['qtyTo']?.text = '5';
+                          }
+                          setState(
+                            () => _addTier(
+                              qtyFrom:
+                                  (int.tryParse(
+                                        _tierControllers.last['qtyTo']?.text ??
+                                            '5',
+                                      ) ??
+                                      5) +
+                                  1,
+                              qtyTo: 9,
+                              fee: 0,
+                            ),
+                          );
+                        },
+                      ),
+                      SizedBox(height: 12.h),
+                      Text(
+                        'เกินจากขั้นสุดท้าย (optional)',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      SizedBox(height: 8.h),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _extraBaseController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'ค่าฐาน (฿)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8.w),
+                          Text(
+                            '+',
+                            style: TextStyle(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(width: 8.w),
+                          Expanded(
+                            child: TextField(
+                              controller: _extraPerUnitController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '฿ ต่อชิ้น',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8.h),
+                      TextField(
+                        controller: _shippingNoteController,
+                        decoration: const InputDecoration(
+                          labelText: 'หมายเหตุการส่ง (optional)',
+                          hintText: 'เช่น Kerry 1-3 วันทำการ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+
                     ListTile(
                       title: Text(
                         'วันที่เพิ่มสินค้า',
@@ -738,7 +1375,148 @@ class _GeneralTabState extends State<GeneralTab>
 
                                   // Step 2: Save product
                                   if (!context.mounted) return;
+                                  if (_scannedBarcode != null) {
+                                    provider.getFormData(
+                                      barcode: _scannedBarcode,
+                                      package: _selectedPackage == 'อื่นๆ'
+                                          ? _customPackageController.text.trim()
+                                          : _selectedPackage,
+                                      packageQty:
+                                          int.tryParse(
+                                            _packageQtyController.text.trim(),
+                                          ) ??
+                                          1,
+                                      unit: _selectedUnit == 'อื่นๆ'
+                                          ? _customUnitController.text.trim()
+                                          : _selectedUnit,
+                                      unitSize:
+                                          double.tryParse(
+                                            _unitSizeController.text.trim(),
+                                          ) ??
+                                          0.0,
+                                      notify: false,
+                                    );
+                                  }
+                                  provider.getFormData(
+                                    saleMode: _saleMode,
+                                    shippingTiers: _saleMode == 'ecommerce'
+                                        ? _tierControllers
+                                              .map(
+                                                (tier) => {
+                                                  'qtyFrom':
+                                                      int.tryParse(
+                                                        tier['qtyFrom']?.text
+                                                                .trim() ??
+                                                            '1',
+                                                      ) ??
+                                                      1,
+                                                  'qtyTo':
+                                                      int.tryParse(
+                                                        tier['qtyTo']?.text
+                                                                .trim() ??
+                                                            '5',
+                                                      ) ??
+                                                      5,
+                                                  'fee':
+                                                      double.tryParse(
+                                                        tier['fee']?.text
+                                                                .trim() ??
+                                                            '0',
+                                                      ) ??
+                                                      0.0,
+                                                },
+                                              )
+                                              .toList()
+                                        : [],
+                                    shippingExtraBase: _saleMode == 'ecommerce'
+                                        ? (double.tryParse(
+                                                _extraBaseController.text
+                                                    .trim(),
+                                              ) ??
+                                              0.0)
+                                        : 0.0,
+                                    shippingExtraPerUnit:
+                                        _saleMode == 'ecommerce'
+                                        ? (double.tryParse(
+                                                _extraPerUnitController.text
+                                                    .trim(),
+                                              ) ??
+                                              0.0)
+                                        : 0.0,
+                                    shippingNote: _saleMode == 'ecommerce'
+                                        ? _shippingNoteController.text.trim()
+                                        : '',
+                                  );
+                                  final barcodeToSave = _scannedBarcode;
                                   await provider.saveProduct(context);
+
+                                  // Update products_master after successful save
+                                  if (barcodeToSave != null &&
+                                      barcodeToSave.isNotEmpty) {
+                                    try {
+                                      final masterRef = firestore
+                                          .collection('products_master')
+                                          .doc(barcodeToSave);
+                                      final masterDoc = await masterRef.get();
+                                      if (!masterDoc.exists) {
+                                        await masterRef.set({
+                                          'barcode': barcodeToSave,
+                                          'proName':
+                                              provider
+                                                  .productData['productName'] ??
+                                              '',
+                                          'description':
+                                              provider
+                                                  .productData['description'] ??
+                                              '',
+                                          'type':
+                                              provider.productData['type'] ??
+                                              '',
+                                          'imageUrl':
+                                              provider
+                                                  .productData['imageUrlList'] ??
+                                              [],
+                                          'package': _selectedPackage == 'อื่นๆ'
+                                              ? _customPackageController.text
+                                                    .trim()
+                                              : _selectedPackage,
+                                          'packageQty':
+                                              int.tryParse(
+                                                _packageQtyController.text
+                                                    .trim(),
+                                              ) ??
+                                              1,
+                                          'unit': _selectedUnit == 'อื่นๆ'
+                                              ? _customUnitController.text
+                                                    .trim()
+                                              : _selectedUnit,
+                                          'unitSize':
+                                              double.tryParse(
+                                                _unitSizeController.text.trim(),
+                                              ) ??
+                                              0.0,
+                                          'contributorVendorId':
+                                              auth.currentUser?.uid,
+                                          'contributorCount': 1,
+                                          'createdAt':
+                                              FieldValue.serverTimestamp(),
+                                          'updatedAt':
+                                              FieldValue.serverTimestamp(),
+                                        });
+                                      } else {
+                                        await masterRef.update({
+                                          'contributorCount':
+                                              FieldValue.increment(1),
+                                          'updatedAt':
+                                              FieldValue.serverTimestamp(),
+                                        });
+                                      }
+                                    } catch (e) {
+                                      debugPrint(
+                                        'Failed to update products_master: $e',
+                                      );
+                                    }
+                                  }
                                 } catch (e) {
                                   Fluttertoast.showToast(
                                     msg: e.toString(),

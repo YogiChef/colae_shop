@@ -112,6 +112,11 @@ class BuyerDetailsWidget extends StatelessWidget {
       ],
     );
 
+    final Map<String, dynamic>? shippingAddress =
+        (orderData['orderType'] as String?) == 'ecommerce'
+            ? (orderData['shippingAddress'] as Map<String, dynamic>?)
+            : null;
+
     return GestureDetector(
       onTap: () async {
         if (items.isNotEmpty && firstProId.isNotEmpty) {
@@ -227,6 +232,56 @@ class BuyerDetailsWidget extends StatelessWidget {
                 ),
               ],
             ),
+            if (shippingAddress != null) ...[
+              SizedBox(height: 12.h),
+              Container(
+                padding: EdgeInsets.all(12.w),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8.r),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.local_shipping, color: Colors.blue[800], size: 18.sp),
+                        SizedBox(width: 8.w),
+                        Text(
+                          'ที่อยู่จัดส่ง',
+                          style: styles(
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[900],
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 6.h),
+                    Text(
+                      shippingAddress['name']?.toString() ?? '-',
+                      style: styles(fontSize: 12.sp, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      shippingAddress['phone']?.toString() ?? '-',
+                      style: styles(fontSize: 12.sp, color: Colors.grey[700]),
+                    ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      [
+                        shippingAddress['address']?.toString() ?? '',
+                        shippingAddress['city']?.toString() ?? '',
+                        shippingAddress['state']?.toString() ?? '',
+                        shippingAddress['country']?.toString() ?? '',
+                        shippingAddress['zipcode']?.toString() ?? '',
+                      ].where((s) => s.isNotEmpty).join(' '),
+                      style: styles(fontSize: 12.sp, color: Colors.grey[800]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

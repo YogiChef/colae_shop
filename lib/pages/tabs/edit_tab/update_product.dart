@@ -41,6 +41,27 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
   DateTime? _scheduleDate;
   final List<String> _categoryList = [];
   String? _selectedCategory;
+  String _saleMode = 'delivery';
+  List<Map<String, TextEditingController>> _tierControllers = [];
+  final TextEditingController _extraBaseController = TextEditingController(text: '0');
+  final TextEditingController _extraPerUnitController = TextEditingController(text: '0');
+  final TextEditingController _shippingNoteController = TextEditingController();
+
+  void _addTier({int qtyFrom = 1, int qtyTo = 5, double fee = 0}) {
+    _tierControllers.add({
+      'qtyFrom': TextEditingController(text: qtyFrom.toString()),
+      'qtyTo': TextEditingController(text: qtyTo.toString()),
+      'fee': TextEditingController(text: fee.toStringAsFixed(0)),
+    });
+  }
+
+  void _removeTier(int index) {
+    final tier = _tierControllers[index];
+    tier['qtyFrom']?.dispose();
+    tier['qtyTo']?.dispose();
+    tier['fee']?.dispose();
+    setState(() => _tierControllers.removeAt(index));
+  }
 
   @override
   void initState() {
@@ -60,6 +81,28 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
         ? dateValue.toDate()
         : dateValue as DateTime?;
     _imageUrlList = List<String>.from(data['imageUrl'] ?? []);
+    _saleMode = data['saleMode']?.toString() ?? 'delivery';
+    // Load shipping tiers (with backward compat for old ecommerceShippingFee)
+    final tiers = data['shippingTiers'] as List?;
+    if (tiers != null && tiers.isNotEmpty) {
+      for (final tier in tiers) {
+        final m = Map<String, dynamic>.from(tier as Map);
+        _addTier(
+          qtyFrom: (m['qtyFrom'] as num?)?.toInt() ?? 1,
+          qtyTo: (m['qtyTo'] as num?)?.toInt() ?? 5,
+          fee: (m['fee'] as num?)?.toDouble() ?? 0.0,
+        );
+      }
+    } else if (data['ecommerceShippingFee'] != null) {
+      _addTier(qtyFrom: 1, qtyTo: 9999, fee: (data['ecommerceShippingFee'] as num).toDouble());
+    } else {
+      _addTier(qtyTo: 9999);
+    }
+    _extraBaseController.text =
+        ((data['shippingExtraBase'] as num?)?.toStringAsFixed(0)) ?? '0';
+    _extraPerUnitController.text =
+        ((data['shippingExtraPerUnit'] as num?)?.toStringAsFixed(0)) ?? '0';
+    _shippingNoteController.text = data['shippingNote']?.toString() ?? '';
 
     _loadCategories();
 
@@ -91,6 +134,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
     _proDesCtl.dispose();
     _categoryCtl.dispose();
     _shippingChargeCtl.dispose();
+    for (final tier in _tierControllers) {
+      tier['qtyFrom']?.dispose();
+      tier['qtyTo']?.dispose();
+      tier['fee']?.dispose();
+    }
+    _extraBaseController.dispose();
+    _extraPerUnitController.dispose();
+    _shippingNoteController.dispose();
     super.dispose();
   }
 
@@ -147,6 +198,23 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
             : null,
         'imageUrl': _imageUrlList,
         'optionGroups': provider.optionGroups,
+        'saleMode': _saleMode,
+        'shippingTiers': _saleMode == 'ecommerce'
+            ? _tierControllers.map((tier) => {
+                'qtyFrom': int.tryParse(tier['qtyFrom']?.text.trim() ?? '1') ?? 1,
+                'qtyTo': int.tryParse(tier['qtyTo']?.text.trim() ?? '5') ?? 5,
+                'fee': double.tryParse(tier['fee']?.text.trim() ?? '0') ?? 0.0,
+              }).toList()
+            : [],
+        'shippingExtraBase': _saleMode == 'ecommerce'
+            ? (double.tryParse(_extraBaseController.text.trim()) ?? 0.0)
+            : 0.0,
+        'shippingExtraPerUnit': _saleMode == 'ecommerce'
+            ? (double.tryParse(_extraPerUnitController.text.trim()) ?? 0.0)
+            : 0.0,
+        'shippingNote': _saleMode == 'ecommerce'
+            ? _shippingNoteController.text.trim()
+            : '',
       });
 
       Fluttertoast.showToast(msg: 'อัปเดตสินค้าสำเร็จ!');
@@ -480,6 +548,194 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                     return null;
                   },
                 ),
+
+              SizedBox(height: 12.h),
+              DropdownButtonFormField<String>(
+                value: _saleMode,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'รูปแบบการขาย',
+                  border: OutlineInputBorder(),
+                  helperText: 'delivery=ส่งใกล้ร้าน, ecommerce=ส่งทั่วประเทศ',
+                  helperMaxLines: 2,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'delivery',
+                    child: Text('🛵 Delivery', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: 'ecommerce',
+                    child: Text('📦 Ecommerce', overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _saleMode = v ?? 'delivery'),
+              ),
+              if (_saleMode == 'ecommerce') ...[
+                SizedBox(height: 12.h),
+                Text(
+                  'ค่าส่ง (ขั้นบันได)',
+                  style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 4.h),
+                Container(
+                  padding: EdgeInsets.all(8.w),
+                  margin: EdgeInsets.only(bottom: 8.h),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6.r),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '💡 ตัวอย่างการใช้งาน',
+                        style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: Colors.blue.shade900),
+                      ),
+                      SizedBox(height: 4.h),
+                      Text(
+                        '• ส่งราคาเดียว: ใส่ขั้นเดียว 1-9999 = 30฿\n'
+                        '• ขั้นบันได: ขั้น 1: 1-5 = 30฿, ขั้น 2: 6-10 = 50฿\n'
+                        '• ส่งฟรี: ใส่ค่าเป็น 0',
+                        style: TextStyle(fontSize: 11.sp, color: Colors.blue.shade800, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 8.h),
+                ...List.generate(_tierControllers.length, (i) {
+                  final tier = _tierControllers[i];
+                  return Container(
+                    margin: EdgeInsets.only(bottom: 8.h),
+                    padding: EdgeInsets.all(8.w),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                    child: Row(
+                      children: [
+                        Text('ขั้น ${i + 1}:', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600)),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: TextField(
+                            controller: tier['qtyFrom'],
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'จาก',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 4.w),
+                        Text('-', style: TextStyle(fontSize: 14.sp)),
+                        SizedBox(width: 4.w),
+                        Expanded(
+                          child: TextField(
+                            controller: tier['qtyTo'],
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'ถึง',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 4.w),
+                        Text('ชิ้น =', style: TextStyle(fontSize: 11.sp)),
+                        SizedBox(width: 4.w),
+                        Expanded(
+                          child: TextField(
+                            controller: tier['fee'],
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: '฿',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        if (_tierControllers.length > 1)
+                          IconButton(
+                            icon: Icon(Icons.close, color: Colors.red, size: 20.sp),
+                            onPressed: () => _removeTier(i),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+                TextButton.icon(
+                  icon: Icon(Icons.add_circle_outline, color: mainColor),
+                  label: Text('เพิ่มขั้น', style: TextStyle(color: mainColor)),
+                  onPressed: () {
+                    final lastTo = int.tryParse(_tierControllers.last['qtyTo']?.text ?? '5') ?? 5;
+                    if (lastTo == 9999) {
+                      _tierControllers.last['qtyTo']?.text = '5';
+                    }
+                    setState(() => _addTier(
+                      qtyFrom: (int.tryParse(_tierControllers.last['qtyTo']?.text ?? '5') ?? 5) + 1,
+                      qtyTo: 9999,
+                      fee: 0,
+                    ));
+                  },
+                ),
+                SizedBox(height: 12.h),
+                Text(
+                  'เกินจากขั้นสุดท้าย (optional)',
+                  style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  'เว้นไว้ 0 ถ้าไม่ต้องการคิดเพิ่ม\nตัวอย่าง: เกิน 10 ชิ้น คิดเพิ่ม 50฿ + 5฿/ชิ้นถัดไป',
+                  style: TextStyle(fontSize: 10.sp, color: Colors.grey[600], height: 1.4),
+                ),
+                SizedBox(height: 4.h),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _extraBaseController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'ค่าฐาน (฿)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    Text('+', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold)),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: TextField(
+                        controller: _extraPerUnitController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: '฿ ต่อชิ้น',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8.h),
+                TextField(
+                  controller: _shippingNoteController,
+                  decoration: const InputDecoration(
+                    labelText: 'หมายเหตุการส่ง (optional)',
+                    hintText: 'เช่น Kerry 1-3 วันทำการ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+              ],
 
               ListTile(
                 title: Text(

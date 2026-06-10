@@ -8,7 +8,6 @@ import 'package:colae_shop/pages/hotel/tabs/hotel_info_tab.dart';
 import 'package:colae_shop/pages/hotel/tabs/rooms_tab.dart';
 import 'package:colae_shop/pages/hotel/tabs/bookings_tab.dart';
 import 'package:colae_shop/pages/hotel/tabs/hotel_earnings_tab.dart';
-import 'package:colae_shop/pages/hotel/tabs/hotel_settings_tab.dart';
 import 'package:colae_shop/services/sevice.dart';
 
 class HotelMainPage extends StatefulWidget {
@@ -30,7 +29,9 @@ class _HotelMainPageState extends State<HotelMainPage> {
 
   Widget _bookingTabIcon() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return Icon(_currentTab == 0 ? IconlyBold.home : IconlyLight.home);
+    if (uid == null) {
+      return Icon(_currentTab == 0 ? IconlyBold.home : IconlyLight.home);
+    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -50,7 +51,9 @@ class _HotelMainPageState extends State<HotelMainPage> {
           }
         }
 
-        final baseIcon = Icon(_currentTab == 0 ? IconlyBold.home : IconlyLight.home);
+        final baseIcon = Icon(
+          _currentTab == 0 ? IconlyBold.home : IconlyLight.home,
+        );
         if (unreadCount == 0) return baseIcon;
 
         return Stack(
@@ -62,11 +65,18 @@ class _HotelMainPageState extends State<HotelMainPage> {
               top: -6,
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 child: Text(
                   unreadCount > 9 ? '9+' : '$unreadCount',
-                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -88,14 +98,11 @@ class _HotelMainPageState extends State<HotelMainPage> {
           selectedItemColor: Colors.white,
           type: BottomNavigationBarType.fixed,
           unselectedItemColor: Colors.white70,
-          selectedIconTheme: IconThemeData(size: 26.sp),
-          selectedLabelStyle: GoogleFonts.righteous(fontSize: 14.sp),
+          selectedIconTheme: IconThemeData(size: 16.spMax),
+          selectedLabelStyle: GoogleFonts.righteous(fontSize: 14.spMax),
           onTap: (index) => setState(() => _currentTab = index),
           items: [
-            BottomNavigationBarItem(
-              icon: _bookingTabIcon(),
-              label: 'การจอง',
-            ),
+            BottomNavigationBarItem(icon: _bookingTabIcon(), label: 'การจอง'),
             BottomNavigationBarItem(
               icon: Icon(_currentTab == 1 ? Icons.bed : Icons.bed_outlined),
               label: 'ห้องพัก',

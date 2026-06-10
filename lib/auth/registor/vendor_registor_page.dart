@@ -19,6 +19,7 @@ import 'package:colae_shop/widgets/button_widget.dart';
 import 'package:colae_shop/widgets/input_textfield.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:colae_shop/main.dart';
 
 class VendorRegistorPage extends StatefulWidget {
   const VendorRegistorPage({super.key});
@@ -415,6 +416,11 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
       email = _auth.currentUser!.email ?? '';
       _emailController.text = email;
       getCategory();
+      // Phase 4: รับ referralCode จาก deep link
+      if (pendingReferralCode != null && pendingReferralCode!.isNotEmpty) {
+        _referralCodeController.text = pendingReferralCode!;
+        pendingReferralCode = null; // consume
+      }
     });
   }
 

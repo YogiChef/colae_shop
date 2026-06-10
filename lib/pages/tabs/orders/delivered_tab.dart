@@ -276,10 +276,7 @@ class _DeliveredState extends State<Delivered>
                   }
 
                   return Card(
-                    margin: EdgeInsets.symmetric(
-                      horizontal: 12.w,
-                      vertical: 1.h,
-                    ),
+                    margin: EdgeInsets.symmetric(vertical: 1.h),
                     elevation: 2,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8.r),
@@ -360,6 +357,7 @@ class _DeliveredState extends State<Delivered>
                         ),
                         ExpansionTile(
                           tilePadding: EdgeInsets.symmetric(horizontal: 12.w),
+                          showTrailingIcon: false,
                           childrenPadding: EdgeInsets.only(
                             left: 12.w,
                             right: 12.w,
@@ -374,7 +372,7 @@ class _DeliveredState extends State<Delivered>
                           ),
                           children: [
                             Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12.w),
+                              padding: EdgeInsets.zero,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [

@@ -3,6 +3,10 @@
 // ignore_for_file: unnecessary_cast
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colae_shop/auth/landing_page.dart';
+import 'package:colae_shop/pages/hotel/hotel_main_page.dart';
+import 'package:colae_shop/widgets/mode_card.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_iconly/flutter_iconly.dart';
@@ -13,6 +17,9 @@ import 'package:colae_shop/pages/chats/vendor_chat_page.dart';
 import 'package:colae_shop/services/sevice.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:colae_shop/pages/referral_dashboard_page.dart';
+import 'package:get/get_core/src/get_main.dart';
+import 'package:get/get_navigation/src/extension_navigation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class EarningPage extends StatefulWidget {
   const EarningPage({super.key});
@@ -45,12 +52,41 @@ class _EarningPageState extends State<EarningPage> {
         .map(
           (snap) => snap.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            // นับทุก doc ที่ buyer ส่ง และ read เป็น null หรือ false
             final isFromBuyer = data['senderId'] != auth.currentUser!.uid;
             final isUnread = data['read'] != true;
             return isFromBuyer && isUnread;
           }).length,
         );
+    _checkLastMode();
+  }
+
+  Future<void> _checkLastMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastMode = prefs.getString('vendor_last_mode');
+    if (lastMode != null && mounted) {
+      _navigateToMode(lastMode);
+      return;
+    }
+  }
+
+  Future<void> _selectMode(String mode) async {
+    if (mode == 'vehicle') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('เร็วๆ นี้! โหมดนี้กำลังพัฒนา')),
+      );
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('vendor_last_mode', mode);
+    _navigateToMode(mode);
+  }
+
+  void _navigateToMode(String mode) {
+    if (mode == 'hotel') {
+      Get.offAll(() => const HotelMainPage());
+    } else {
+      Get.offAll(() => const LandingPage());
+    }
   }
 
   static Map<String, double> calculateEarnings(
@@ -76,6 +112,73 @@ class _EarningPageState extends State<EarningPage> {
     }
 
     return {'total': totalEarnings, 'shipping': totalShippingEarnings};
+  }
+
+  Widget _infoTable({
+    required List<MapEntry<String, String>> rows,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(7.r),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: mainColor, width: 0.5),
+          borderRadius: BorderRadius.circular(7.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: List.generate(rows.length, (i) {
+            final isLast = i == rows.length - 1;
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.amber,
+
+                border: isLast
+                    ? null
+                    : Border(bottom: BorderSide(color: Colors.white, width: 1)),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      rows[i].key,
+                      style: styles(
+                        fontSize: 15.sp,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      rows[i].value,
+                      textAlign: TextAlign.right,
+                      style: styles(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+      ),
+    );
   }
 
   @override
@@ -104,7 +207,7 @@ class _EarningPageState extends State<EarningPage> {
                 Row(
                   children: [
                     CircleAvatar(
-                      radius: 22.r,
+                      radius: 20.sp,
                       backgroundImage: data['image'] != null
                           ? NetworkImage(data['image'])
                           : null,
@@ -177,187 +280,96 @@ class _EarningPageState extends State<EarningPage> {
               final screenWidth = MediaQuery.of(context).size.width;
 
               return SingleChildScrollView(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      vertical: 50.h,
-                      horizontal: 20.w,
-                    ),
-                    child: Column(
-                      children: [
-                        Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          elevation: 4,
-                          child: ListTile(
-                            leading: const Icon(
-                              Icons.card_giftcard,
-                              color: Colors.orange,
-                            ),
-                            title: Text(
-                              'รายได้จากการแนะนำเพื่อน',
-                              style: styles(
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ReferralDashboardPage(),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 16.h),
-                        InkWell(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    vertical: 20.h,
+                    horizontal: 20.w,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      SizedBox(height: 16.h),
+                      SizedBox(
+                        width: screenWidth * 0.90,
+                        child: _infoTable(
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => const BillingPage(),
                             ),
                           ),
-                          child: Material(
-                            borderRadius: BorderRadius.circular(15),
-                            elevation: 10,
-                            shadowColor: Colors.pink,
-                            child: Container(
-                              height: height * 0.26.h,
-                              width: screenWidth * 0.8,
-                              constraints: BoxConstraints(
-                                minHeight: 150.h,
-                                maxHeight: 200.h,
+                          rows: [
+                            MapEntry(
+                              'รายได้รวม',
+                              '฿${totalEarnings.toStringAsFixed(2)}',
+                            ),
+                            MapEntry(
+                              'ค่าจัดส่ง',
+                              '฿${totalShippingEarnings.toStringAsFixed(2)}',
+                            ),
+                            MapEntry('ออร์เดอร์', '$totalOrders'),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: 16.h),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('hotel_bookings')
+                            .where(
+                              'hotelId',
+                              isEqualTo: FirebaseAuth.instance.currentUser?.uid,
+                            )
+                            .where('status', isEqualTo: 'pending')
+                            .snapshots(),
+                        builder: (context, snap) {
+                          final count = snap.data?.docs.length ?? 0;
+                          return ModeCard(
+                            icon: Icons.hotel,
+                            color: Colors.blue,
+                            title: 'ที่พัก',
+                            subtitle: 'โรงแรม รีสอร์ท โฮมสเตย์',
+                            enabled: true,
+                            badgeCount: count, // ← เพิ่ม
+                            onTap: () => _selectMode('hotel'),
+                          );
+                        },
+                      ),
+                      SizedBox(height: 16.h),
+                      Card(
+                        color: Colors.indigo,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7.r),
+                        ),
+                        elevation: 4,
+
+                        child: SizedBox(
+                          height: 140.h,
+                          child: Center(
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.card_giftcard,
+                                color: Colors.orange,
                               ),
-                              decoration: BoxDecoration(
-                                color: mainColor,
-                                borderRadius: BorderRadius.circular(15),
+                              title: Text(
+                                'แนะนำเพื่อน',
+                                style: styles(
+                                  fontSize: 18.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
                               ),
-                              child: Column(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      'รายได้รวม',
-                                      style: styles(
-                                        fontSize: 16.sp,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      '฿${totalEarnings.toStringAsFixed(2)}',
-                                      style: styles(
-                                        fontSize: 16.sp,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ReferralDashboardPage(),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 30),
-                        Material(
-                          borderRadius: BorderRadius.circular(15),
-                          elevation: 10,
-                          shadowColor: Colors.pink,
-                          child: Container(
-                            height: height * 0.26.h,
-                            width: screenWidth * 0.8,
-                            constraints: BoxConstraints(
-                              minHeight: 150.h,
-                              maxHeight: 200.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.amber,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'รวมค่าจัดส่ง',
-                                    style: styles(
-                                      fontSize: 16.sp,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    '฿${totalShippingEarnings.toStringAsFixed(2)}',
-                                    style: styles(
-                                      fontSize: 16.sp,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 30),
-                        Material(
-                          elevation: 15,
-                          shadowColor: Colors.blueGrey,
-                          borderRadius: BorderRadius.circular(15.r),
-                          child: Container(
-                            height: height * 0.26.h,
-                            width: screenWidth * 0.8,
-                            constraints: BoxConstraints(
-                              minHeight: 150.h,
-                              maxHeight: 200.h,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade800,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'ออร์เดอร์ทั้งหมด',
-                                    style: styles(
-                                      fontSize: 16.sp,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    totalOrders.toString(),
-                                    style: styles(
-                                      fontSize: 16.sp,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               );

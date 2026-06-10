@@ -1,10 +1,12 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colae_shop/auth/landing_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:colae_shop/services/sevice.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -121,10 +123,28 @@ class _BookingsTabState extends State<BookingsTab> {
       appBar: AppBar(
         title: Text(
           'การจอง',
-          style: styles(color: Colors.white, fontSize: 18.sp),
+          style: styles(
+            color: Colors.white,
+            fontSize: 20.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('vendor_last_mode');
+            if (!context.mounted) return;
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const LandingPage()),
+              (route) => false,
+            );
+          },
         ),
         backgroundColor: mainColor,
         foregroundColor: Colors.white,
+        centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -156,8 +176,8 @@ class _BookingsTabState extends State<BookingsTab> {
               firstDay: DateTime.now().subtract(const Duration(days: 60)),
               lastDay: DateTime.now().add(const Duration(days: 365)),
               focusedDay: _focused,
-              rowHeight: 48,
-              daysOfWeekHeight: 20,
+              rowHeight: 48.w,
+              daysOfWeekHeight: 20.spMax,
               selectedDayPredicate: (day) => isSameDay(day, _selected),
               calendarFormat: CalendarFormat.month,
               onPageChanged: (d) => setState(() => _focused = d),
@@ -172,7 +192,7 @@ class _BookingsTabState extends State<BookingsTab> {
                 formatButtonVisible: false,
                 titleCentered: true,
                 titleTextStyle: styles(
-                  fontSize: 15.sp,
+                  fontSize: 14.sp,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -199,7 +219,7 @@ class _BookingsTabState extends State<BookingsTab> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('${day.day}', style: TextStyle(fontSize: 13.sp)),
+                        Text('${day.day}', style: TextStyle(fontSize: 12.sp)),
                         if (booked > 0)
                           Text(
                             '$booked',
@@ -328,59 +348,56 @@ class _BookingsTabState extends State<BookingsTab> {
         color: Colors.grey.shade50,
         border: Border(top: BorderSide(color: Colors.grey.shade300)),
       ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              DateFormat('d MMMM yyyy', 'th').format(_selected),
-              style: styles(fontSize: 15.sp, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8.h),
-            Row(
-              children: [
-                _statBox('ห้องว่าง', '$available', Colors.green),
-                SizedBox(width: 8.w),
-                _statBox('จองแล้ว', '$booked', Colors.orange),
-                SizedBox(width: 8.w),
-                _statBox('ทั้งหมด', '$_totalRoomsAll', Colors.blue),
-              ],
-            ),
-            SizedBox(height: 12.h),
-            Text(
-              'การจอง (${list.length})',
-              style: styles(fontSize: 14.sp, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8.h),
-            list.isEmpty
-                ? Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20.h),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.event_available,
-                            size: 40.sp,
-                            color: Colors.grey.shade300,
-                          ),
-                          SizedBox(height: 8.h),
-                          Text(
-                            'ไม่มีการจองวันนี้',
-                            style: styles(color: Colors.grey),
-                          ),
-                        ],
-                      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            DateFormat('d MMMM yyyy', 'th').format(_selected),
+            style: styles(fontSize: 15.sp, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8.h),
+          Row(
+            children: [
+              _statBox('ห้องว่าง', '$available', Colors.green),
+              SizedBox(width: 8.w),
+              _statBox('จองแล้ว', '$booked', Colors.orange),
+              SizedBox(width: 8.w),
+              _statBox('ทั้งหมด', '$_totalRoomsAll', Colors.blue),
+            ],
+          ),
+          SizedBox(height: 12.h),
+          Text(
+            'การจอง (${list.length})',
+            style: styles(fontSize: 14.sp, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8.h),
+          list.isEmpty
+              ? Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20.h),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.event_available,
+                          size: 40.sp,
+                          color: Colors.grey.shade300,
+                        ),
+                        SizedBox(height: 8.h),
+                        Text(
+                          'ไม่มีการจองวันนี้',
+                          style: styles(color: Colors.grey),
+                        ),
+                      ],
                     ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: list.length,
-                    itemBuilder: (context, i) => _bookingCard(list[i]),
                   ),
-          ],
-        ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: list.length,
+                  itemBuilder: (context, i) => _bookingCard(list[i]),
+                ),
+        ],
       ),
     );
   }
@@ -552,12 +569,16 @@ class _DayDetailsSheet extends StatelessWidget {
             SizedBox(height: 12.h),
             Text(
               DateFormat('d MMMM yyyy', 'th').format(day),
-              style: styles(fontSize: 18.sp, fontWeight: FontWeight.bold),
+              style: styles(fontSize: 15.sp, fontWeight: FontWeight.w600),
             ),
             SizedBox(height: 8.h),
             Text(
               'การจอง ${bookings.length} รายการ',
-              style: styles(fontSize: 14.sp, color: Colors.grey[700]),
+              style: styles(
+                fontSize: 14.sp,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
             ),
             SizedBox(height: 8.h),
             Expanded(
@@ -840,9 +861,7 @@ class _BookingDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _infoTable({
-    required List<MapEntry<String, String>> rows,
-  }) {
+  Widget _infoTable({required List<MapEntry<String, String>> rows}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1042,7 +1061,7 @@ class _BookingDetailSheet extends StatelessWidget {
         _actionButton(
           context,
           'Check-out',
-          Colors.grey,
+          Colors.amber,
           'completed',
           'Check-out',
         ),

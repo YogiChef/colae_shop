@@ -792,7 +792,7 @@ class _MainVendorPageState extends State<MainVendorPage> {
         index: _currentTab,
         children: const [
           EarningPage(),
-          GeneralTab(),
+          GeneralUpload(),
           EditPage(),
           OrderPage(),
           StoreSettingsPage(),

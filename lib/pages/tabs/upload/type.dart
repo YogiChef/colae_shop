@@ -1,15 +1,13 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:colae_shop/services/sevice.dart';
-import 'package:colae_shop/widgets/button_widget.dart';
 import 'package:colae_shop/widgets/category_widget.dart';
 
 class TypeTab extends StatefulWidget {
   static const String route = 'categories';
-
   const TypeTab({super.key});
 
   @override
@@ -17,26 +15,46 @@ class TypeTab extends StatefulWidget {
 }
 
 class _TypeTabState extends State<TypeTab> {
-  final FirebaseStorage storage = FirebaseStorage.instance;
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _nameController = TextEditingController();
+  bool _saving = false;
 
-  String? fileName;
-  late String categoryName;
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
 
-  Future<void> uploadSubCategory() async {
+  Future<void> _save() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('กรุณากรอกชื่อประเภทอาหาร')),
+      );
+      return;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('กรุณา login ก่อน')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
     EasyLoading.show();
-    if (_formKey.currentState!.validate()) {
-      await firestore
-          .collection('type')
-          .doc(fileName)
-          .set({'typename': categoryName})
-          .whenComplete(() {
-            EasyLoading.dismiss();
-          });
-      _formKey.currentState!.reset();
-    } else {
-      EasyLoading.dismiss();
+
+    try {
+      await FirebaseFirestore.instance.collection('type').add({
+        'typename': name,
+        'vendorId': uid,
+      });
+      _nameController.clear();
+      EasyLoading.showSuccess('เพิ่มแล้ว');
+    } catch (e) {
+      EasyLoading.showError('ผิดพลาด: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -44,73 +62,45 @@ class _TypeTabState extends State<TypeTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.cyan.shade500,
-        leading: Padding(
-          padding: EdgeInsets.only(left: 12.w),
-          child: CircleAvatar(
-            radius: 20.w,
-            child: IconButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              icon: const Icon(Icons.arrow_back),
-            ),
-          ),
+        backgroundColor: mainColor,
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
         ),
-        title: Container(
-          margin: EdgeInsets.only(top: 20.h, bottom: 20.h),
-          child: Text(
-            'Food of type',
-            style: styles(fontSize: 20.sp, fontWeight: FontWeight.w500),
-          ),
+        title: Text(
+          'ประเภทอาหาร',
+          style: styles(fontSize: 18.sp, fontWeight: FontWeight.w600, color: Colors.white),
         ),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Padding(
-            padding: EdgeInsets.only(left: 20.w, right: 20.w),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20.w),
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Container(
-                          padding: EdgeInsets.only(left: 12.w),
-                          width: MediaQuery.of(context).size.width * 0.7,
-                          child: TextFormField(
-                            onChanged: (value) {
-                              categoryName = value;
-                            },
-                            validator: (value) {
-                              if (value!.isEmpty) {
-                                return 'Please Category Name Must not be empty';
-                              } else {
-                                return null;
-                              }
-                            },
-                            decoration: const InputDecoration(
-                              hintText: 'Enter Category Name',
-                            ),
-                          ),
-                        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        hintText: 'เพิ่มประเภทอาหาร',
+                        border: UnderlineInputBorder(),
                       ),
-                      ButtonWidget(
-                        label: 'Save',
-                        style: styles(color: Colors.white),
-                        icon: Icons.save_rounded,
-                        press: uploadSubCategory,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-                const CategoryWidget(),
-              ],
-            ),
+                  SizedBox(width: 8.w),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.save, color: Colors.white),
+                    label: Text('Save', style: TextStyle(color: Colors.white, fontSize: 13.sp)),
+                    style: ElevatedButton.styleFrom(backgroundColor: mainColor),
+                    onPressed: _saving ? null : _save,
+                  ),
+                ],
+              ),
+              SizedBox(height: 16.h),
+              const CategoryWidget(),
+            ],
           ),
         ),
       ),

@@ -338,22 +338,25 @@ async function checkQualified(userId) {
   // เงื่อนไข 1: ต้องแนะนำครบ 12 คน
   if ((data.referralCount ?? 0) < 12) return false;
 
-  // เงื่อนไข 2: ตามประเภท user
-  const now = new Date();
-  const monthKey = now.toISOString().slice(0, 7);
+  // เงื่อนไข 2: ยอดเดือนปัจจุบัน (monthly) ตามประเภท user
+  const monthKey = new Date().toISOString().slice(0, 7);
+
+  if (userType === 'customer') {
+    const monthDoc = await db.collection('buyers').doc(userId)
+        .collection('monthly_spending').doc(monthKey).get();
+    return (monthDoc.data()?.total ?? 0) >= 5000;
+  }
 
   if (userType === 'vendor') {
-    return (data.totalSales ?? 0) >= 5000;
+    const monthDoc = await db.collection('vendors').doc(userId)
+        .collection('monthly_sales').doc(monthKey).get();
+    return (monthDoc.data()?.total_sales ?? 0) >= 5000;
   }
 
   if (userType === 'rider') {
     const monthDoc = await db.collection('riders').doc(userId)
         .collection('monthly_earnings').doc(monthKey).get();
-    return (monthDoc.data()?.total ?? 0) >= 15000;
-  }
-
-  if (userType === 'customer') {
-    return (data.totalSpent ?? 0) >= 5000;
+    return (monthDoc.data()?.total ?? 0) >= 5000;
   }
 
   return false;
@@ -407,8 +410,9 @@ exports.processReferralCommission = onDocumentUpdated("orders/{orderId}", async 
   if (!buyerId) return;
 
   const shippingCharge = Number(after.shippingCharge ?? 0);
+  const shippingFee = Number(after.shippingFee ?? 0);  // ecommerce ใช้ field นี้
   const totalPrice = Number(after.totalPrice ?? 0);
-  const foodTotal = totalPrice - shippingCharge;
+  const foodTotal = totalPrice - shippingCharge - shippingFee;
   if (foodTotal <= 0) return;
 
   const pool = parseFloat((foodTotal * 0.02).toFixed(2));
@@ -499,10 +503,18 @@ exports.processHotelReferralCommission = onDocumentUpdated("hotel_bookings/{book
     });
   }
 
-  // update buyers totalSpent
+  // update buyers totalSpent + monthly_spending
   await db.collection('buyers').doc(guestId).update({
     totalSpent: admin.firestore.FieldValue.increment(effectiveAmount),
   });
+
+  await db.collection('buyers').doc(guestId)
+      .collection('monthly_spending').doc(month)
+      .set({
+        total: admin.firestore.FieldValue.increment(effectiveAmount),
+        month: month,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
 
   await batch.commit();
   logger.info(`[HOTEL-REFERRAL] ✅ bookingId=${bookingId} pool=${pool} uplines=${uplineIds.length}`);
@@ -657,6 +669,56 @@ exports.deleteOldHotelChats = onSchedule({
   logger.info(`[CHAT-CLEANUP] DONE: bookings=${processedBookings} chats deleted=${deletedChats}`);
 });
 
+exports.autoConfirmEcommerceDelivered = onSchedule({
+  schedule: '0 2 * * *',  // ทุกวัน 02:00
+  timeZone: 'Asia/Bangkok',
+  region: 'asia-southeast1',
+}, async (event) => {
+  const db = admin.firestore();
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 วันก่อน
+
+  logger.info(`[AUTO-CONFIRM] เริ่มหา ecommerce orders shipped < ${cutoff.toISOString()}`);
+
+  let ordersSnap;
+  try {
+    ordersSnap = await db.collection('orders')
+      .where('orderType', '==', 'ecommerce')
+      .where('status', '==', 'shipped')
+      .where('shippedAt', '<', admin.firestore.Timestamp.fromDate(cutoff))
+      .get();
+  } catch (err) {
+    logger.error('[AUTO-CONFIRM] query error (อาจต้องสร้าง composite index):', err);
+    return;
+  }
+
+  if (ordersSnap.empty) {
+    logger.info('[AUTO-CONFIRM] ไม่มี orders ที่ต้อง confirm');
+    return;
+  }
+
+  let confirmedCount = 0;
+  let failedCount = 0;
+
+  for (const orderDoc of ordersSnap.docs) {
+    try {
+      await orderDoc.ref.update({
+        status: 'delivered',
+        deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+        autoConfirmed: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      confirmedCount++;
+      logger.info(`[AUTO-CONFIRM] order ${orderDoc.id} → delivered`);
+    } catch (err) {
+      failedCount++;
+      logger.error(`[AUTO-CONFIRM] order ${orderDoc.id} ผิดพลาด:`, err);
+    }
+  }
+
+  logger.info(`[AUTO-CONFIRM] DONE: confirmed=${confirmedCount} failed=${failedCount}`);
+});
+
 exports.updateBuyerTotalSpent = onDocumentUpdated("orders/{orderId}", async (event) => {
   const before = event.data.before.data();
   const after = event.data.after.data();
@@ -667,14 +729,27 @@ exports.updateBuyerTotalSpent = onDocumentUpdated("orders/{orderId}", async (eve
   const buyerId = after.buyerId;
   if (!buyerId) return;
 
-  const foodTotal = Number(after.totalPrice ?? 0) - Number(after.shippingCharge ?? 0);
+  const foodTotal = Number(after.totalPrice ?? 0)
+    - Number(after.shippingCharge ?? 0)
+    - Number(after.shippingFee ?? 0);
   if (foodTotal <= 0) return;
 
-  await admin.firestore().collection('buyers').doc(buyerId).update({
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const db = admin.firestore();
+
+  await db.collection('buyers').doc(buyerId).update({
     totalSpent: admin.firestore.FieldValue.increment(foodTotal),
   });
 
-  logger.info(`[BUYER-SPENT] buyerId=${buyerId} +${foodTotal}`);
+  await db.collection('buyers').doc(buyerId)
+      .collection('monthly_spending').doc(monthKey)
+      .set({
+        total: admin.firestore.FieldValue.increment(foodTotal),
+        month: monthKey,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+  logger.info(`[BUYER-SPENT] buyerId=${buyerId} +${foodTotal} month=${monthKey}`);
 });
 
 exports.updateRiderMonthlyEarnings = onDocumentUpdated("orders/{orderId}", async (event) => {
@@ -752,7 +827,6 @@ exports.registerReferral = onCall(async (request) => {
   const currentCount = referrerDoc.data()?.referralCount ?? 0;
   batch.update(referrerDoc.ref, {
     referralCount: admin.firestore.FieldValue.increment(1),
-    ...(currentCount + 1 >= 12 ? { referralQualified: true } : {}),
   });
 
   await batch.commit();
@@ -786,4 +860,121 @@ exports.generateReferralCodeForUser = onCall(async (request) => {
 
   logger.info(`[GEN-CODE] col=${col} userId=${userId} code=${code}`);
   return { referralCode: code };
+});
+
+exports.notifyAdminNewWithdrawal = onDocumentCreated({
+  document: 'withdrawal_requests/{requestId}',
+  region: 'asia-southeast1',
+}, async (event) => {
+  const data = event.data.data();
+  if (!data) return;
+
+  const requestId = event.params.requestId;
+  const userId = data.userId;
+  const amount = Number(data.amount ?? 0);
+  const payoutInfo = data.payoutInfo || {};
+  const fullName = payoutInfo.fullName || '-';
+  const promptPay = payoutInfo.promptPayId || '';
+  const bankName = payoutInfo.bankName || '';
+  const bankAccount = payoutInfo.bankAccount || '';
+
+  logger.info(`[WITHDRAWAL] new request: ${requestId} from ${userId} amount=${amount}`);
+
+  const payoutMethod = promptPay
+    ? `PromptPay: ${promptPay}`
+    : `${bankName} ${bankAccount}`;
+
+  const message = {
+    notification: {
+      title: '💰 คำขอถอนเงิน MLM ใหม่',
+      body: `${fullName} ขอถอน ฿${amount.toFixed(2)} (${payoutMethod})`,
+    },
+    data: {
+      type: 'withdrawal_request',
+      requestId: requestId,
+      userId: userId,
+      amount: amount.toString(),
+    },
+    topic: 'admin_notifications',
+  };
+
+  try {
+    await admin.messaging().send(message);
+    logger.info(`[WITHDRAWAL] notification sent: ${requestId}`);
+  } catch (err) {
+    logger.error(`[WITHDRAWAL] notification failed:`, err);
+  }
+
+  try {
+    await admin.firestore().collection('admin_notifications').add({
+      type: 'withdrawal_request',
+      title: 'คำขอถอนเงิน MLM ใหม่',
+      message: `${fullName} ขอถอน ฿${amount.toFixed(2)}`,
+      requestId: requestId,
+      userId: userId,
+      amount: amount,
+      payoutMethod: payoutMethod,
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    logger.error(`[WITHDRAWAL] log failed:`, err);
+  }
+});
+
+exports.onWithdrawalCompleted = onDocumentUpdated({
+  document: 'withdrawal_requests/{requestId}',
+  region: 'asia-southeast1',
+}, async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+
+  if (!before || !after) return;
+  if (before.status === after.status) return;
+  if (after.status !== 'completed') return;
+
+  const userId = after.userId;
+  const amount = Number(after.amount ?? 0);
+
+  if (!userId || amount <= 0) return;
+
+  logger.info(`[WITHDRAWAL-COMPLETE] requestId=${event.params.requestId} userId=${userId} amount=${amount}`);
+
+  const db = admin.firestore();
+
+  // หา referral_transactions ที่ pending_payout ของ user นี้
+  const txSnap = await db.collection('referral_transactions')
+    .where('toUserId', '==', userId)
+    .where('status', '==', 'pending_payout')
+    .orderBy('timestamp', 'asc')
+    .get();
+
+  if (txSnap.empty) {
+    logger.warn(`[WITHDRAWAL-COMPLETE] no pending transactions for ${userId}`);
+    return;
+  }
+
+  const batch = db.batch();
+  let deletedCount = 0;
+  let deletedSum = 0;
+
+  for (const doc of txSnap.docs) {
+    const txAmount = Number(doc.data().amount ?? 0);
+    batch.delete(doc.ref);
+    deletedCount++;
+    deletedSum += txAmount;
+  }
+
+  // update user totalWithdrawn (reuse getUserDoc helper)
+  const userFound = await getUserDoc(userId);
+  if (userFound) {
+    batch.update(userFound.doc.ref, {
+      totalWithdrawn: admin.firestore.FieldValue.increment(amount),
+      lastWithdrawalAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+
+  logger.info(`[WITHDRAWAL-COMPLETE] ✅ deleted ${deletedCount} txs sum=${deletedSum.toFixed(2)} for ${userId}`);
 });

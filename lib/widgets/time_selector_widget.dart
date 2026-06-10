@@ -117,7 +117,6 @@ class _TimeSelectorWidgetState extends State<TimeSelectorWidget> {
     );
     if (picked != null) {
       setState(() {
-        // แก้: setState ทันทีเพื่อแสดง local
         if (isOpen) {
           _openTime = picked;
         } else {
@@ -153,9 +152,7 @@ class _TimeSelectorWidgetState extends State<TimeSelectorWidget> {
         ? _closeTime!.format(context)
         : (widget.currentClose ?? 'ปิด');
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+    return Flexible(
       child: Padding(
         padding: EdgeInsets.only(left: 12.w, right: 12.w),
         child: Column(
@@ -172,87 +169,54 @@ class _TimeSelectorWidgetState extends State<TimeSelectorWidget> {
                   ),
                 ),
                 SizedBox(width: 12.w),
-                Expanded(
+                Flexible(
                   child: InkWell(
                     onTap: () => _selectTime(true),
-                    child: Container(
-                      height: 35.h,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(20.r),
-                          bottomLeft: Radius.circular(20.r),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 13.sp,
+                          color: Colors.black87,
                         ),
-                        border: Border(
-                          right: BorderSide(
-                            color: Colors.grey.shade300,
-                            width: 1.w,
+                        SizedBox(width: 4.w),
+                        Text(
+                          openText,
+                          style: styles(
+                            fontSize: 12.sp,
+                            fontWeight: _openTime != null
+                                ? FontWeight.w500
+                                : FontWeight.normal,
                           ),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 13.sp,
-                            color: Colors.black87,
-                          ),
-                          SizedBox(width: 4.w),
-                          Text(
-                            openText,
-                            style: styles(
-                              fontSize: 12.sp,
-                              fontWeight: _openTime != null
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
                 Expanded(
                   child: InkWell(
                     onTap: () => _selectTime(false),
-                    child: Container(
-                      height: 35.h,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          topRight: Radius.circular(20.r),
-                          bottomRight: Radius.circular(20.r),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 13.sp,
+                          color: Colors.red.shade700,
                         ),
-                        border: Border(
-                          right: BorderSide(
-                            color: Colors.grey.shade300,
-                            width: 1.w,
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 13.sp,
+                        SizedBox(width: 4.w),
+                        Text(
+                          closeText,
+                          style: styles(
+                            fontSize: 12.sp,
+                            fontWeight: _closeTime != null
+                                ? FontWeight.w500
+                                : FontWeight.normal,
                             color: Colors.red.shade700,
                           ),
-                          SizedBox(width: 4.w),
-                          Text(
-                            closeText,
-                            style: styles(
-                              fontSize: 12.sp,
-                              fontWeight: _closeTime != null
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
-                              color: Colors.red.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

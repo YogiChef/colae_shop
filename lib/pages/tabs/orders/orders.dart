@@ -51,7 +51,7 @@ class _OrderPageState extends State<OrderPage>
           labelStyle: styles(fontSize: 14.sp, fontWeight: FontWeight.w600),
           tabs: const [
             Tab(child: Text('กำลังจัดทำ')),
-            Tab(child: Text('ประวัติการซื้อ')),
+            Tab(child: Text('จัดส่งแล้ว')),
           ],
         ),
       ),

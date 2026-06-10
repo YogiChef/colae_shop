@@ -1,7 +1,9 @@
 // ignore_for_file: avoid_print, deprecated_member_use
 import 'dart:async';
+import 'package:app_links/app_links.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colae_shop/auth/landing_page.dart';
 import 'package:colae_shop/firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -17,12 +19,24 @@ import 'package:flutter/foundation.dart';
 import 'package:thai_address_picker/thai_address_picker.dart'
     hide ChangeNotifierProvider;
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:colae_shop/auth/landing_page.dart';
 import 'package:colae_shop/auth/login_page.dart';
-import 'package:colae_shop/pages/mode_selector_page.dart';
 import 'package:colae_shop/providers/product_provider.dart';
 import 'package:colae_shop/providers/vendor_order_provider.dart';
 import 'package:colae_shop/services/notification_service.dart';
+
+String? pendingReferralCode;
+
+void _handleIncomingLink(Uri uri) {
+  // Phase 4: deep link จาก r.html
+  // รูปแบบ:
+  //   colae-shop://signup?code=XXXXX
+  //   colae-shop://referral?code=XXXXX
+  //   https://colae-app.web.app/r?code=XXXXX&app=shop
+  final code = uri.queryParameters['code'];
+  if (code != null && code.isNotEmpty) {
+    pendingReferralCode = code;
+  }
+}
 
 Future<void> _saveFcmToken() async {
   try {
@@ -38,6 +52,7 @@ Future<void> _saveFcmToken() async {
     await FirebaseFirestore.instance.collection('vendors').doc(uid).update({
       'fcmToken': token,
     });
+    await _syncAdminTopic(uid);
   } catch (e) {
     print("Failed to save FCM token: ${e.toString()}");
   }
@@ -50,8 +65,28 @@ Future<void> _updateFcmToken(String newToken) async {
     await FirebaseFirestore.instance.collection('vendors').doc(uid).update({
       'fcmToken': newToken,
     });
+    await _syncAdminTopic(uid);
   } catch (e) {
     print("Failed to update FCM token: ${e.toString()}");
+  }
+}
+
+Future<void> _syncAdminTopic(String uid) async {
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('vendors')
+        .doc(uid)
+        .get();
+    final isAdmin = doc.data()?['isAdmin'] as bool? ?? false;
+    if (isAdmin) {
+      await FirebaseMessaging.instance.subscribeToTopic('admin_notifications');
+      print('✅ Admin subscribed to admin_notifications');
+    } else {
+      await FirebaseMessaging.instance
+          .unsubscribeFromTopic('admin_notifications');
+    }
+  } catch (e) {
+    print('Failed to sync admin topic: $e');
   }
 }
 
@@ -92,6 +127,15 @@ void main() async {
         ? AndroidProvider.playIntegrity
         : AndroidProvider.debug,
   );
+
+  final appLinks = AppLinks();
+  final initialUri = await appLinks.getInitialLink();
+  if (initialUri != null) {
+    _handleIncomingLink(initialUri);
+  }
+  appLinks.uriLinkStream.listen((uri) {
+    _handleIncomingLink(uri);
+  }, onError: (err) {});
 
   await NotificationService.init();
   await FirebaseMessaging.instance.requestPermission(
@@ -247,7 +291,7 @@ class _SplashViewState extends State<SplashView> {
   void _navigateToNextScreen() async {
     final User? user = await FirebaseAuth.instance.authStateChanges().first;
     if (user != null) {
-      Get.offAll(() => const ModeSelectorPage());
+      Get.offAll(() => const LandingPage());
     } else {
       Get.offAll(() => const LoginPage());
     }

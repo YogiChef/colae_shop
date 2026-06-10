@@ -36,6 +36,7 @@ class VendorOrderProvider with ChangeNotifier {
             'rider_accepted',
             'picked_up',
             'self_delivering',
+            'shipped',
           ],
         )
         .snapshots()

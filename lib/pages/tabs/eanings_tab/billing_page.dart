@@ -538,24 +538,37 @@ class _BillingPageState extends State<BillingPage>
                               ),
                               children: [
                                 Padding(
-                                  padding: EdgeInsets.all(8.w),
+                                  padding: EdgeInsets.all(4.w),
                                   child: Text(
                                     'เดือน',
-                                    style: styles(fontWeight: FontWeight.bold),
+                                    style: styles(
+                                      fontWeight: FontWeight.w400,
+                                      fontSize: 12.sp,
+                                      color: Colors.black54,
+                                    ),
                                   ),
                                 ),
                                 Padding(
-                                  padding: EdgeInsets.all(8.w),
+                                  padding: EdgeInsets.all(4.w),
                                   child: Text(
                                     'รายได้',
-                                    style: styles(fontWeight: FontWeight.bold),
+                                    style: styles(
+                                      fontWeight: FontWeight.w400,
+                                      fontSize: 12.sp,
+                                      color: Colors.black54,
+                                    ),
                                   ),
                                 ),
                                 Padding(
-                                  padding: EdgeInsets.all(8.w),
+                                  padding: EdgeInsets.all(4.w),
                                   child: Text(
                                     'สถานะ',
-                                    style: styles(fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                    style: styles(
+                                      fontWeight: FontWeight.w400,
+                                      fontSize: 12.sp,
+                                      color: Colors.black54,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -564,7 +577,7 @@ class _BillingPageState extends State<BillingPage>
                               (data) => TableRow(
                                 children: [
                                   Padding(
-                                    padding: EdgeInsets.all(8.w),
+                                    padding: EdgeInsets.all(4.w),
                                     child: Text(
                                       data['month'],
                                       textAlign: TextAlign.center,
@@ -575,7 +588,7 @@ class _BillingPageState extends State<BillingPage>
                                     ),
                                   ),
                                   Padding(
-                                    padding: EdgeInsets.all(8.w),
+                                    padding: EdgeInsets.all(4.w),
                                     child: Text(
                                       '฿${data['sales'].toStringAsFixed(2)}',
                                       style: styles(
@@ -585,9 +598,9 @@ class _BillingPageState extends State<BillingPage>
                                     ),
                                   ),
                                   Padding(
-                                    padding: EdgeInsets.all(8.w),
+                                    padding: EdgeInsets.all(4.w),
                                     child: Text(
-                                      data['paid'] ? 'จ่ายแล้ว' : 'ค้างจ่าย',
+                                      data['paid'] ? '✅' : '❌',
                                       textAlign: TextAlign.center,
                                       style: styles(
                                         fontSize: 12.sp,

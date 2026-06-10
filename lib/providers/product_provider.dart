@@ -35,6 +35,16 @@ class ProductProvider with ChangeNotifier {
     double? shippingCharge,
     List<Map<String, dynamic>>? optionGroupsData,
     String? notes,
+    String? saleMode,
+    List<Map<String, dynamic>>? shippingTiers,
+    double? shippingExtraBase,
+    double? shippingExtraPerUnit,
+    String? shippingNote,
+    String? barcode,
+    String? package,
+    int? packageQty,
+    String? unit,
+    double? unitSize,
     bool notify = true,
   }) {
     if (productName != null) productData['productName'] = productName;
@@ -49,7 +59,6 @@ class ProductProvider with ChangeNotifier {
     if (chargeShipping != null) productData['chargeShipping'] = chargeShipping;
     if (shippingCharge != null) productData['shippingCharge'] = shippingCharge;
 
-    // Deep copy optionGroups ให้ปลอดภัย
     if (optionGroupsData != null) {
       optionGroups = optionGroupsData
           .map((e) => Map<String, dynamic>.from(e))
@@ -69,6 +78,19 @@ class ProductProvider with ChangeNotifier {
       this.notes = notes;
       productData['notes'] = notes;
     }
+
+    if (saleMode != null) productData['saleMode'] = saleMode;
+    if (shippingTiers != null) productData['shippingTiers'] = shippingTiers;
+    if (shippingExtraBase != null)
+      productData['shippingExtraBase'] = shippingExtraBase;
+    if (shippingExtraPerUnit != null)
+      productData['shippingExtraPerUnit'] = shippingExtraPerUnit;
+    if (shippingNote != null) productData['shippingNote'] = shippingNote;
+    if (barcode != null) productData['barcode'] = barcode;
+    if (package != null) productData['package'] = package;
+    if (packageQty != null) productData['packageQty'] = packageQty;
+    if (unit != null) productData['unit'] = unit;
+    if (unitSize != null) productData['unitSize'] = unitSize;
 
     if (notify) notifyListeners();
   }
@@ -141,6 +163,31 @@ class ProductProvider with ChangeNotifier {
       chargeShipping: data['chargeShipping'] as bool? ?? false,
       shippingCharge: (data['shippingCharge'] as num?)?.toDouble() ?? 0.0,
       notes: data['notes']?.toString() ?? '',
+      saleMode: data['saleMode']?.toString() ?? 'delivery',
+      shippingTiers: data['shippingTiers'] != null
+          ? List<Map<String, dynamic>>.from(
+              (data['shippingTiers'] as List).map(
+                (e) => Map<String, dynamic>.from(e as Map),
+              ),
+            )
+          : (data['ecommerceShippingFee'] != null
+                ? [
+                    {
+                      'qtyFrom': 1,
+                      'qtyTo': 9999,
+                      'fee': (data['ecommerceShippingFee'] as num).toDouble(),
+                    },
+                  ]
+                : []),
+      shippingExtraBase: (data['shippingExtraBase'] as num?)?.toDouble() ?? 0.0,
+      shippingExtraPerUnit:
+          (data['shippingExtraPerUnit'] as num?)?.toDouble() ?? 0.0,
+      shippingNote: data['shippingNote']?.toString() ?? '',
+      barcode: data['barcode']?.toString() ?? '',
+      package: data['package']?.toString() ?? '',
+      packageQty: (data['packageQty'] as num?)?.toInt() ?? 1,
+      unit: data['unit']?.toString() ?? '',
+      unitSize: (data['unitSize'] as num?)?.toDouble() ?? 0.0,
       notify: false,
     );
 
@@ -207,6 +254,11 @@ class ProductProvider with ChangeNotifier {
         'shippingCharge': productData['shippingCharge'] ?? 0.0,
         'optionGroups': optionGroups, // ใช้ตัวนี้แทน sizeList
         'notes': productData['notes'] ?? '',
+        'saleMode': productData['saleMode'] ?? 'delivery',
+        'shippingTiers': productData['shippingTiers'] ?? [],
+        'shippingExtraBase': productData['shippingExtraBase'] ?? 0.0,
+        'shippingExtraPerUnit': productData['shippingExtraPerUnit'] ?? 0.0,
+        'shippingNote': productData['shippingNote'] ?? '',
         'imageUrl': productData['imageUrlList'] ?? [],
         'bussiName': vendorData['bussinessName'] ?? '',
         'storeImage': vendorData['image'] ?? '',
@@ -218,6 +270,11 @@ class ProductProvider with ChangeNotifier {
         'phone': vendorData['phone'] ?? '',
         'email': vendorData['email'] ?? '',
         'vendorId': auth.currentUser!.uid,
+        'barcode': productData['barcode'] ?? '',
+        'package': productData['package'] ?? '',
+        'packageQty': productData['packageQty'] ?? 1,
+        'unit': productData['unit'] ?? '',
+        'unitSize': productData['unitSize'] ?? 0.0,
       });
 
       clearData();

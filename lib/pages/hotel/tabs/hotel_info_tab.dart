@@ -3,7 +3,7 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:colae_shop/pages/mode_selector_page.dart';
+import 'package:colae_shop/auth/landing_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -306,7 +306,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                 if (!context.mounted) return;
                 Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(builder: (_) => const ModeSelectorPage()),
+                  MaterialPageRoute(builder: (_) => const LandingPage()),
                   (route) => false,
                 );
               },
@@ -338,7 +338,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
               if (!context.mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const ModeSelectorPage()),
+                MaterialPageRoute(builder: (_) => const LandingPage()),
                 (route) => false,
               );
             },
@@ -355,52 +355,78 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
               _sectionTitle('ข้อมูลพื้นฐาน'),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
+                style: styles(fontSize: 13.spMax, fontWeight: FontWeight.w400),
+                decoration: InputDecoration(
                   labelText: 'ชื่อที่พัก *',
+                  labelStyle: styles(
+                    fontSize: 13.spMax,
+                    fontWeight: FontWeight.w400,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) =>
                     (v?.trim().isEmpty ?? true) ? 'กรุณากรอกชื่อที่พัก' : null,
               ),
-              SizedBox(height: 12.h),
+              SizedBox(height: 12.w),
               DropdownButtonFormField<String>(
-                value: _mainTypeOptions.contains(_mainType) ? _mainType : null,
+                initialValue: _mainTypeOptions.contains(_mainType)
+                    ? _mainType
+                    : null,
                 decoration: const InputDecoration(
                   labelText: 'ประเภทที่พัก *',
                   border: OutlineInputBorder(),
                 ),
                 items: _mainTypeOptions.map((t) {
-                  return DropdownMenuItem(value: t, child: Text(t));
+                  return DropdownMenuItem(
+                    value: t,
+                    child: Text(
+                      t,
+                      style: styles(
+                        fontSize: 12.spMax,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  );
                 }).toList(),
                 onChanged: (v) => setState(() => _mainType = v),
                 hint: _mainTypeOptions.isEmpty
                     ? const Text('กำลังโหลด...')
                     : const Text('เลือกประเภทที่พัก'),
               ),
-              SizedBox(height: 12.h),
+              SizedBox(height: 12.w),
               TextFormField(
                 controller: _descController,
                 maxLines: 4,
                 maxLength: 500,
-                decoration: const InputDecoration(
+                style: styles(fontSize: 13.spMax, fontWeight: FontWeight.w400),
+                decoration: InputDecoration(
                   labelText: 'รายละเอียด',
+                  labelStyle: styles(
+                    fontSize: 13.spMax,
+                    fontWeight: FontWeight.w400,
+                  ),
                   border: OutlineInputBorder(),
                 ),
               ),
-              SizedBox(height: 12.h),
+              SizedBox(height: 12.w),
               _sectionTitle('ที่อยู่'),
               TextFormField(
                 controller: _addressController,
                 maxLength: 224,
-                decoration: const InputDecoration(
+                style: styles(fontSize: 13.spMax, fontWeight: FontWeight.w400),
+                decoration: InputDecoration(
                   labelText: 'เลขที่อยู่ / หมู่บ้าน / ซอย / ถนน',
-                  border: OutlineInputBorder(),
+                  labelStyle: styles(
+                    fontSize: 13.spMax,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
               ),
-              SizedBox(height: 12.h),
+              SizedBox(height: 12.w),
               ThaiAddressForm(
                 textStyle: styles(
-                  fontSize: 14.sp,
+                  fontSize: 13.sp,
                   color: Colors.black87,
                   fontWeight: FontWeight.w500,
                 ),
@@ -421,7 +447,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                 },
                 useThai: true,
               ),
-              SizedBox(height: 12.h),
+              SizedBox(height: 12.w),
               Row(
                 children: [
                   Expanded(
@@ -449,13 +475,13 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                 ],
               ),
 
-              SizedBox(height: 20.h),
+              SizedBox(height: 20.w),
               _sectionTitle(
                 'รูปภาพ (${_existingImages.length + _newImages.length}/25)',
               ),
               _buildImageGrid(),
 
-              SizedBox(height: 20.h),
+              SizedBox(height: 20.w),
               _sectionTitle('สิ่งอำนวยความสะดวก'),
               _buildCheckList(
                 options: _amenitiesOptions,
@@ -467,7 +493,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                     setState(() => _customAmenities.removeAt(i)),
               ),
 
-              SizedBox(height: 20.h),
+              SizedBox(height: 20.w),
               _sectionTitle('บริการ'),
               _buildCheckList(
                 options: _servicesOptions,
@@ -479,10 +505,10 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                     setState(() => _customServices.removeAt(i)),
               ),
 
-              SizedBox(height: 30.h),
+              SizedBox(height: 30.w),
               SizedBox(
                 width: double.infinity,
-                height: 50.h,
+                height: 50.w,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.save, color: Colors.white),
                   label: Text(
@@ -502,7 +528,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                   onPressed: _saving ? null : _save,
                 ),
               ),
-              SizedBox(height: 30.h),
+              SizedBox(height: 30.w),
             ],
           ),
         ),
@@ -512,12 +538,12 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
 
   Widget _sectionTitle(String text) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 10.h, top: 4.h),
+      padding: EdgeInsets.only(bottom: 10.w, top: 4.w),
       child: Row(
         children: [
           Container(
             width: 4.w,
-            height: 18.h,
+            height: 18.w,
             decoration: BoxDecoration(
               color: mainColor,
               borderRadius: BorderRadius.circular(2),
@@ -677,7 +703,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
             }),
           ),
         ],
-        SizedBox(height: 8.h),
+        SizedBox(height: 8.w),
         Row(
           children: [
             Expanded(
