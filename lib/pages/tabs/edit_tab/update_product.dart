@@ -1,8 +1,8 @@
 // ignore_for_file: depend_on_referenced_packages, use_build_context_synchronously, deprecated_member_use, unnecessary_underscores
 
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -31,20 +31,23 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
   final _proPriceCtl = TextEditingController();
   final _proDesCtl = TextEditingController();
   final _categoryCtl = TextEditingController();
-  final _shippingChargeCtl = TextEditingController();
 
   final ImagePicker picker = ImagePicker();
   final List<File> _newImages = [];
   List<String> _imageUrlList = [];
 
-  bool _chargeShipping = false;
   DateTime? _scheduleDate;
   final List<String> _categoryList = [];
   String? _selectedCategory;
   String _saleMode = 'delivery';
-  List<Map<String, TextEditingController>> _tierControllers = [];
-  final TextEditingController _extraBaseController = TextEditingController(text: '0');
-  final TextEditingController _extraPerUnitController = TextEditingController(text: '0');
+  bool _trackStock = true;
+  final List<Map<String, TextEditingController>> _tierControllers = [];
+  final TextEditingController _extraBaseController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _extraPerUnitController = TextEditingController(
+    text: '0',
+  );
   final TextEditingController _shippingNoteController = TextEditingController();
 
   void _addTier({int qtyFrom = 1, int qtyTo = 5, double fee = 0}) {
@@ -74,15 +77,13 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
     final cat = data['type']?.toString() ?? '';
     _selectedCategory = cat.isNotEmpty ? cat : null;
     _categoryCtl.text = cat;
-    _chargeShipping = data['chargeShipping'] ?? false;
-    _shippingChargeCtl.text = (data['shippingCharge'] ?? 0).toString();
     final dateValue = data['date'];
     _scheduleDate = dateValue is Timestamp
         ? dateValue.toDate()
         : dateValue as DateTime?;
     _imageUrlList = List<String>.from(data['imageUrl'] ?? []);
     _saleMode = data['saleMode']?.toString() ?? 'delivery';
-    // Load shipping tiers (with backward compat for old ecommerceShippingFee)
+    _trackStock = data['trackStock'] as bool? ?? true;
     final tiers = data['shippingTiers'] as List?;
     if (tiers != null && tiers.isNotEmpty) {
       for (final tier in tiers) {
@@ -94,9 +95,13 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
         );
       }
     } else if (data['ecommerceShippingFee'] != null) {
-      _addTier(qtyFrom: 1, qtyTo: 9999, fee: (data['ecommerceShippingFee'] as num).toDouble());
+      _addTier(
+        qtyFrom: 1,
+        qtyTo: 5,
+        fee: (data['ecommerceShippingFee'] as num).toDouble(),
+      );
     } else {
-      _addTier(qtyTo: 9999);
+      _addTier(qtyTo: 5);
     }
     _extraBaseController.text =
         ((data['shippingExtraBase'] as num?)?.toStringAsFixed(0)) ?? '0';
@@ -133,7 +138,6 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
     _proPriceCtl.dispose();
     _proDesCtl.dispose();
     _categoryCtl.dispose();
-    _shippingChargeCtl.dispose();
     for (final tier in _tierControllers) {
       tier['qtyFrom']?.dispose();
       tier['qtyTo']?.dispose();
@@ -177,9 +181,6 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
       final provider = Provider.of<ProductProvider>(context, listen: false);
       final qty = int.tryParse(_qtyNameCtl.text) ?? 0;
       final price = double.tryParse(_proPriceCtl.text) ?? 0.0;
-      final shipping = _chargeShipping
-          ? double.tryParse(_shippingChargeCtl.text) ?? 0.0
-          : 0.0;
 
       try {
         await FirebaseFirestore.instance.enableNetwork();
@@ -187,12 +188,11 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
 
       await firestore.collection('products').doc(widget.productData.id).update({
         'proName': _proNameCtl.text.trim(),
-        'pqty': qty,
+        'pqty': _trackStock ? qty : 0,
+        'trackStock': _trackStock,
         'price': price,
         'description': _proDesCtl.text.trim(),
         'type': _categoryCtl.text.trim(),
-        'chargeShipping': _chargeShipping,
-        'shippingCharge': shipping,
         'date': _scheduleDate != null
             ? Timestamp.fromDate(_scheduleDate!)
             : null,
@@ -200,11 +200,20 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
         'optionGroups': provider.optionGroups,
         'saleMode': _saleMode,
         'shippingTiers': _saleMode == 'ecommerce'
-            ? _tierControllers.map((tier) => {
-                'qtyFrom': int.tryParse(tier['qtyFrom']?.text.trim() ?? '1') ?? 1,
-                'qtyTo': int.tryParse(tier['qtyTo']?.text.trim() ?? '5') ?? 5,
-                'fee': double.tryParse(tier['fee']?.text.trim() ?? '0') ?? 0.0,
-              }).toList()
+            ? _tierControllers
+                  .map(
+                    (tier) => {
+                      'qtyFrom':
+                          int.tryParse(tier['qtyFrom']?.text.trim() ?? '1') ??
+                          1,
+                      'qtyTo':
+                          int.tryParse(tier['qtyTo']?.text.trim() ?? '5') ?? 5,
+                      'fee':
+                          double.tryParse(tier['fee']?.text.trim() ?? '0') ??
+                          0.0,
+                    },
+                  )
+                  .toList()
             : [],
         'shippingExtraBase': _saleMode == 'ecommerce'
             ? (double.tryParse(_extraBaseController.text.trim()) ?? 0.0)
@@ -239,7 +248,7 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: mainColor,
+        backgroundColor: context.isDark ? Colors.transparent : mainColor,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
@@ -252,7 +261,7 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
               radius: 20.r,
               backgroundColor: _imageUrlList.isNotEmpty ? null : Colors.grey,
               backgroundImage: _imageUrlList.isNotEmpty
-                  ? NetworkImage(_imageUrlList[0])
+                  ? CachedNetworkImageProvider(_imageUrlList[0])
                   : null,
               child: _imageUrlList.isNotEmpty
                   ? null
@@ -263,7 +272,7 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
               child: Text(
                 widget.productData.get('proName')?.toString() ??
                     'Unnamed Product',
-                style: styles(fontSize: 13.sp, color: Colors.white),
+                style: styles(fontSize: 16.sp, color: Colors.white),
               ),
             ),
           ],
@@ -284,12 +293,18 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                     if (index < _imageUrlList.length) {
                       return Stack(
                         children: [
-                          Image.network(
-                            _imageUrlList[index],
+                          CachedNetworkImage(
+                            imageUrl: _imageUrlList[index],
                             width: 120.w,
                             height: 90.h,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            memCacheWidth: 400,
+                            placeholder: (_, __) => Container(
+                              width: 120.w,
+                              height: 90.h,
+                              color: Colors.grey.shade200,
+                            ),
+                            errorWidget: (_, __, ___) => Container(
                               width: 120.w,
                               height: 90.h,
                               color: Colors.grey,
@@ -351,13 +366,36 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                 isExpanded: true,
                 hint: Text(
                   'เลือกประเภทสินค้า',
-                  style: styles(fontSize: 14.sp, color: Colors.black45),
+                  style: styles(fontSize: 14.sp, color: context.textColor),
+                ),
+                decoration: InputDecoration(
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                 ),
                 items: _categoryList
                     .map(
                       (cat) => DropdownMenuItem(
                         value: cat,
-                        child: Text(cat, style: styles(fontSize: 14.sp)),
+                        child: Text(
+                          cat,
+                          style: styles(
+                            fontSize: 14.sp,
+                            color: context.textColor,
+                          ),
+                        ),
                       ),
                     )
                     .toList(),
@@ -377,7 +415,6 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
               ),
               SizedBox(height: 16.h),
 
-              // ชื่อสินค้า, จำนวน, ราคา, รายละเอียด
               InputTextfield(
                 controller: _proNameCtl,
                 textInputType: TextInputType.text,
@@ -387,19 +424,42 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                 validator: (value) =>
                     value!.isEmpty ? 'กรุณากรอกชื่อสินค้า' : null,
               ),
-              InputTextfield(
-                controller: _qtyNameCtl,
-                textInputType: TextInputType.number,
-                prefixIcon: const Icon(
-                  Icons.production_quantity_limits_outlined,
+              SwitchListTile(
+                title: Text(
+                  'ตัดสต๊อก',
+                  style: styles(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                    color: context.textColor,
+                  ),
                 ),
-                hintText: 'Quantity',
-                label: const Text('Quantity'),
-                validator: (value) {
-                  final qty = int.tryParse(value ?? '');
-                  return qty == null || qty <= 0 ? 'จำนวนต้องมากกว่า 0' : null;
-                },
+                subtitle: Text(
+                  _trackStock
+                      ? 'จำกัดจำนวน — ตัดสต๊อกอัตโนมัติเมื่อขาย'
+                      : 'ไม่จำกัดจำนวน — เหมาะกับอาหาร/บริการ',
+                  style: styles(fontSize: 11.sp, color: context.subColor),
+                ),
+                value: _trackStock,
+                onChanged: (val) => setState(() => _trackStock = val),
+                activeColor: mainColor,
+                contentPadding: EdgeInsets.zero,
               ),
+              if (_trackStock)
+                InputTextfield(
+                  controller: _qtyNameCtl,
+                  textInputType: TextInputType.number,
+                  prefixIcon: const Icon(
+                    Icons.production_quantity_limits_outlined,
+                  ),
+                  hintText: 'Quantity',
+                  label: const Text('Quantity'),
+                  validator: (value) {
+                    final qty = int.tryParse(value ?? '');
+                    return qty == null || qty <= 0
+                        ? 'จำนวนต้องมากกว่า 0'
+                        : null;
+                  },
+                ),
               InputTextfield(
                 controller: _proPriceCtl,
                 textInputType: TextInputType.number,
@@ -429,9 +489,21 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                   final groups = provider.optionGroups;
                   return ExpansionTile(
                     leading: const Icon(Icons.menu_book),
-                    title: const Text('ตัวเลือกเมนู'),
+                    title: Text(
+                      'ตัวเลือกเมนู',
+                      style: styles(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w500,
+                        color: context.textColor,
+                      ),
+                    ),
                     subtitle: Text(
                       groups.isEmpty ? '' : '${groups.length} กลุ่ม',
+                      style: styles(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w500,
+                        color: context.textColor,
+                      ),
                     ),
                     children: [
                       ...groups.asMap().entries.map((entry) {
@@ -456,7 +528,7 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                           ),
                           title: Text(groupName),
                           subtitle: Text(
-                            '${groupTypeEnum.label} • ${options.length} ตัวเลือก',
+                            '${groupTypeEnum.label} / ${options.length} ตัวเลือก',
                           ),
                           trailing: IconButton(
                             icon: const Icon(
@@ -474,11 +546,23 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                               final opt = optEntry.value;
                               return ListTile(
                                 dense: true,
-                                title: Text(opt['name'] ?? ''),
+                                title: Text(
+                                  opt['name'] ?? '',
+                                  style: styles(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w500,
+                                    color: context.textColor,
+                                  ),
+                                ),
                                 subtitle: Text(
                                   opt['price'] == 0
                                       ? 'ฟรี'
                                       : '+฿${opt['price']}',
+                                  style: styles(
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w500,
+                                    color: context.textColor,
+                                  ),
                                 ),
                                 trailing: IconButton(
                                   icon: const Icon(
@@ -500,7 +584,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                                 Icons.add_circle_outline,
                                 color: Colors.green,
                               ),
-                              title: const Text('เพิ่มตัวเลือก'),
+                              title: Text(
+                                'เพิ่มตัวเลือก',
+                                style: styles(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.textColor,
+                                ),
+                              ),
                               onTap: () => _addOptionToGroupDialog(groupIndex),
                             ),
                           ],
@@ -511,7 +602,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                           Icons.add,
                           color: Colors.deepOrange,
                         ),
-                        title: const Text('เพิ่มกลุ่มตัวเลือกใหม่'),
+                        title: Text(
+                          'เพิ่มกลุ่มตัวเลือกใหม่',
+                          style: styles(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w500,
+                            color: context.textColor,
+                          ),
+                        ),
                         onTap: _addGroupDialog,
                       ),
                     ],
@@ -519,43 +617,27 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                 },
               ),
 
-              CheckboxListTile(
-                title: Text(
-                  'ค่าจัดส่ง',
-                  style: styles(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.black54,
-                  ),
-                ),
-                value: _chargeShipping,
-                onChanged: (value) =>
-                    setState(() => _chargeShipping = value ?? false),
-              ),
-              if (_chargeShipping)
-                InputTextfield(
-                  controller: _shippingChargeCtl,
-                  textInputType: TextInputType.number,
-                  prefixIcon: const Icon(CupertinoIcons.money_dollar_circle),
-                  hintText: 'Shipping Charge (max 5)',
-                  label: const Text('Shipping Charge'),
-                  validator: (value) {
-                    final charge = double.tryParse(value ?? '');
-                    if (charge == null || charge <= 0) {
-                      return 'ค่าส่งต้องมากกว่า 0';
-                    }
-                    if (charge > 5) return 'ค่าส่งไม่เกิน 5';
-                    return null;
-                  },
-                ),
-
               SizedBox(height: 12.h),
               DropdownButtonFormField<String>(
                 value: _saleMode,
                 isExpanded: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'รูปแบบการขาย',
-                  border: OutlineInputBorder(),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                   helperText: 'delivery=ส่งใกล้ร้าน, ecommerce=ส่งทั่วประเทศ',
                   helperMaxLines: 2,
                 ),
@@ -566,7 +648,10 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                   ),
                   DropdownMenuItem(
                     value: 'ecommerce',
-                    child: Text('📦 Ecommerce', overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      '📦 Ecommerce',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
                 onChanged: (v) => setState(() => _saleMode = v ?? 'delivery'),
@@ -574,151 +659,300 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
               if (_saleMode == 'ecommerce') ...[
                 SizedBox(height: 12.h),
                 Text(
-                  'ค่าส่ง (ขั้นบันได)',
-                  style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
-                ),
-                SizedBox(height: 4.h),
-                Container(
-                  padding: EdgeInsets.all(8.w),
-                  margin: EdgeInsets.only(bottom: 8.h),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(6.r),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '💡 ตัวอย่างการใช้งาน',
-                        style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: Colors.blue.shade900),
-                      ),
-                      SizedBox(height: 4.h),
-                      Text(
-                        '• ส่งราคาเดียว: ใส่ขั้นเดียว 1-9999 = 30฿\n'
-                        '• ขั้นบันได: ขั้น 1: 1-5 = 30฿, ขั้น 2: 6-10 = 50฿\n'
-                        '• ส่งฟรี: ใส่ค่าเป็น 0',
-                        style: TextStyle(fontSize: 11.sp, color: Colors.blue.shade800, height: 1.5),
-                      ),
-                    ],
+                  'ค่าส่ง',
+                  textAlign: TextAlign.left,
+                  style: styles(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                    color: context.textColor,
                   ),
                 ),
+
                 SizedBox(height: 8.h),
                 ...List.generate(_tierControllers.length, (i) {
                   final tier = _tierControllers[i];
-                  return Container(
-                    margin: EdgeInsets.only(bottom: 8.h),
-                    padding: EdgeInsets.all(8.w),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8.r),
-                    ),
-                    child: Row(
-                      children: [
-                        Text('ขั้น ${i + 1}:', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600)),
-                        SizedBox(width: 8.w),
-                        Expanded(
-                          child: TextField(
-                            controller: tier['qtyFrom'],
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'จาก',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
-                              border: const OutlineInputBorder(),
+                  return Row(
+                    children: [
+                      Text(
+                        'ขั้น ${i + 1}:',
+                        style: styles(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: context.subColor,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: TextField(
+                          controller: tier['qtyFrom'],
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: styles(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w400,
+                            color: context.textColor,
+                          ),
+                          decoration: InputDecoration(
+                            label: Text(
+                              'จาก',
+                              style: styles(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                color: context.textColor,
+                              ),
+                            ),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8.w,
+                              vertical: 8.h,
+                            ),
+                            focusedBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.yellow.shade900,
+                                width: 2,
+                              ),
+                            ),
+                            errorBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.red,
+                                width: 2,
+                              ),
+                            ),
+                            enabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: context.isDark
+                                    ? Colors.white70
+                                    : Colors.grey,
+                                width: 1,
+                              ),
                             ),
                           ),
                         ),
-                        SizedBox(width: 4.w),
-                        Text('-', style: TextStyle(fontSize: 14.sp)),
-                        SizedBox(width: 4.w),
-                        Expanded(
-                          child: TextField(
-                            controller: tier['qtyTo'],
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'ถึง',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
-                              border: const OutlineInputBorder(),
+                      ),
+
+                      SizedBox(width: 20.w),
+                      Expanded(
+                        child: TextField(
+                          controller: tier['qtyTo'],
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: styles(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w400,
+                            color: context.textColor,
+                          ),
+                          decoration: InputDecoration(
+                            label: Text(
+                              'ถึง',
+                              style: styles(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                color: context.textColor,
+                              ),
+                            ),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8.w,
+                              vertical: 8.h,
+                            ),
+                            focusedBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.yellow.shade900,
+                                width: 2,
+                              ),
+                            ),
+                            errorBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.red,
+                                width: 2,
+                              ),
+                            ),
+                            enabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: context.isDark
+                                    ? Colors.white70
+                                    : Colors.grey,
+                                width: 1,
+                              ),
                             ),
                           ),
                         ),
-                        SizedBox(width: 4.w),
-                        Text('ชิ้น =', style: TextStyle(fontSize: 11.sp)),
-                        SizedBox(width: 4.w),
-                        Expanded(
-                          child: TextField(
-                            controller: tier['fee'],
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: '฿',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
-                              border: const OutlineInputBorder(),
+                      ),
+                      SizedBox(width: 20.w),
+                      Expanded(
+                        child: TextField(
+                          controller: tier['fee'],
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: styles(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w400,
+                            color: context.textColor,
+                          ),
+                          decoration: InputDecoration(
+                            label: Text(
+                              'ค่าส่ง',
+                              style: styles(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                color: context.textColor,
+                              ),
+                            ),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8.w,
+                              vertical: 8.h,
+                            ),
+                            focusedBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.yellow.shade900,
+                                width: 2,
+                              ),
+                            ),
+                            errorBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Colors.red,
+                                width: 2,
+                              ),
+                            ),
+                            enabledBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: context.isDark
+                                    ? Colors.white70
+                                    : Colors.grey,
+                                width: 1,
+                              ),
                             ),
                           ),
                         ),
-                        if (_tierControllers.length > 1)
-                          IconButton(
-                            icon: Icon(Icons.close, color: Colors.red, size: 20.sp),
-                            onPressed: () => _removeTier(i),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
+                      ),
+                      if (_tierControllers.length > 1)
+                        IconButton(
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                            size: 20.sp,
                           ),
-                      ],
-                    ),
+                          onPressed: () => _removeTier(i),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                    ],
                   );
                 }),
                 TextButton.icon(
                   icon: Icon(Icons.add_circle_outline, color: mainColor),
-                  label: Text('เพิ่มขั้น', style: TextStyle(color: mainColor)),
+                  label: Text('เพิ่มขั้น', style: styles(color: mainColor)),
                   onPressed: () {
-                    final lastTo = int.tryParse(_tierControllers.last['qtyTo']?.text ?? '5') ?? 5;
-                    if (lastTo == 9999) {
+                    final lastTo =
+                        int.tryParse(
+                          _tierControllers.last['qtyTo']?.text ?? '5',
+                        ) ??
+                        5;
+                    if (lastTo == 5) {
                       _tierControllers.last['qtyTo']?.text = '5';
                     }
-                    setState(() => _addTier(
-                      qtyFrom: (int.tryParse(_tierControllers.last['qtyTo']?.text ?? '5') ?? 5) + 1,
-                      qtyTo: 9999,
-                      fee: 0,
-                    ));
+                    setState(
+                      () => _addTier(
+                        qtyFrom:
+                            (int.tryParse(
+                                  _tierControllers.last['qtyTo']?.text ?? '5',
+                                ) ??
+                                5) +
+                            1,
+                        qtyTo: 5,
+                        fee: 0,
+                      ),
+                    );
                   },
                 ),
-                SizedBox(height: 12.h),
+                SizedBox(height: 8.h),
                 Text(
-                  'เกินจากขั้นสุดท้าย (optional)',
-                  style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600),
+                  'เกินจากขั้นสุดท้าย',
+                  style: styles(fontSize: 12.sp, fontWeight: FontWeight.w600),
                 ),
-                SizedBox(height: 4.h),
-                Text(
-                  'เว้นไว้ 0 ถ้าไม่ต้องการคิดเพิ่ม\nตัวอย่าง: เกิน 10 ชิ้น คิดเพิ่ม 50฿ + 5฿/ชิ้นถัดไป',
-                  style: TextStyle(fontSize: 10.sp, color: Colors.grey[600], height: 1.4),
-                ),
-                SizedBox(height: 4.h),
+                SizedBox(height: 8.h),
+
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _extraBaseController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'ค่าฐาน (฿)',
-                          border: OutlineInputBorder(),
+                        textAlign: TextAlign.center,
+                        style: styles(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w400,
+                          color: context.textColor,
+                        ),
+                        decoration: InputDecoration(
+                          label: Text(
+                            'ประกันค่าขนส่ง',
+                            style: styles(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w400,
+                              color: context.textColor,
+                            ),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
                           isDense: true,
                         ),
                       ),
                     ),
-                    SizedBox(width: 8.w),
-                    Text('+', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold)),
-                    SizedBox(width: 8.w),
+                    SizedBox(width: 20.w),
+
                     Expanded(
                       child: TextField(
                         controller: _extraPerUnitController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: '฿ ต่อชิ้น',
-                          border: OutlineInputBorder(),
+                        textAlign: TextAlign.center,
+                        style: styles(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w400,
+                          color: context.textColor,
+                        ),
+                        decoration: InputDecoration(
+                          label: Text(
+                            'ค่าส่งเกินขั้นสุดท้าย',
+                            style: styles(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w400,
+                              color: context.textColor,
+                            ),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
                           isDense: true,
                         ),
                       ),
@@ -728,10 +962,24 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                 SizedBox(height: 8.h),
                 TextField(
                   controller: _shippingNoteController,
-                  decoration: const InputDecoration(
-                    labelText: 'หมายเหตุการส่ง (optional)',
+                  decoration: InputDecoration(
+                    labelText: 'หมายเหตุการส่ง',
                     hintText: 'เช่น Kerry 1-3 วันทำการ',
-                    border: OutlineInputBorder(),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Colors.yellow.shade900,
+                        width: 2,
+                      ),
+                    ),
+                    errorBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.red, width: 2),
+                    ),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: context.isDark ? Colors.white70 : Colors.grey,
+                        width: 1,
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(height: 12.h),
@@ -743,7 +991,7 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                   style: styles(
                     fontSize: 13.sp,
                     fontWeight: FontWeight.w400,
-                    color: Colors.black54,
+                    color: context.textColor,
                   ),
                 ),
                 subtitle: Text(
@@ -816,14 +1064,31 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
               const SizedBox(height: 8),
               DropdownButtonFormField<OptionGroupType>(
                 value: selectedType,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'ประเภทกลุ่ม',
-                  border: OutlineInputBorder(),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                 ),
                 items: OptionGroupType.values.map((type) {
                   return DropdownMenuItem(
                     value: type,
-                    child: Text(type.label, style: styles(fontSize: 14.sp)),
+                    child: Text(
+                      type.label,
+                      style: styles(fontSize: 14.sp, color: context.textColor),
+                    ),
                   );
                 }).toList(),
                 onChanged: (value) =>
@@ -834,7 +1099,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('ยกเลิก'),
+              child: Text(
+                'ยกเลิก',
+                style: styles(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: context.textColor,
+                ),
+              ),
             ),
             TextButton(
               onPressed: () {
@@ -854,7 +1126,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                   );
                 }
               },
-              child: const Text('เพิ่ม'),
+              child: Text(
+                'เพิ่ม',
+                style: styles(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: context.textColor,
+                ),
+              ),
             ),
           ],
         ),
@@ -882,9 +1161,23 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'ชื่อตัวเลือก',
-                border: OutlineInputBorder(),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Colors.yellow.shade900,
+                    width: 2,
+                  ),
+                ),
+                errorBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red, width: 2),
+                ),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: context.isDark ? Colors.white70 : Colors.grey,
+                    width: 1,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -894,7 +1187,21 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
               readOnly: isFree,
               decoration: InputDecoration(
                 labelText: isFree ? 'ฟรี' : 'ราคาเพิ่ม',
-                border: const OutlineInputBorder(),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: Colors.yellow.shade900,
+                    width: 2,
+                  ),
+                ),
+                errorBorder: const UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red, width: 2),
+                ),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(
+                    color: context.isDark ? Colors.white70 : Colors.grey,
+                    width: 1,
+                  ),
+                ),
                 suffixText: isFree ? '฿0' : '฿',
               ),
             ),
@@ -903,7 +1210,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('ยกเลิก'),
+            child: Text(
+              'ยกเลิก',
+              style: styles(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+                color: context.textColor,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -926,7 +1240,14 @@ class _UpdateProductPageState extends State<UpdateProductPage> {
                 );
               }
             },
-            child: const Text('เพิ่ม'),
+            child: Text(
+              'เพิ่ม',
+              style: styles(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+                color: context.textColor,
+              ),
+            ),
           ),
         ],
       ),

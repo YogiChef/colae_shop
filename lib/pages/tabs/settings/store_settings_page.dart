@@ -3,7 +3,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -15,7 +14,6 @@ import 'package:colae_shop/pages/main_vendor_page.dart';
 import 'package:colae_shop/pages/tabs/settings/table_qr_page.dart';
 import 'package:colae_shop/services/sevice.dart';
 import 'package:colae_shop/widgets/button_widget.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:colae_shop/widgets/time_selector_widget.dart';
 
 class StoreSettingsPage extends StatefulWidget {
@@ -44,120 +42,15 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
   bool _isTemporarilyClosed = false;
   late Stream<DocumentSnapshot> _vendorStream;
 
-  String _defaultCarrier = 'Kerry';
-  final TextEditingController _customCarrierController =
-      TextEditingController();
-  final List<String> _carriers = [
-    'Kerry',
-    'Flash',
-    'J&T',
-    'Thai Post',
-    'อื่นๆ',
-  ];
-
-  String _promptpayType = 'phone';
-  final TextEditingController _promptpayNumberController =
-      TextEditingController();
-  final TextEditingController _promptpayNameController =
-      TextEditingController();
-
   @override
   void initState() {
     super.initState();
     final uid = _auth.currentUser!.uid;
     _vendorStream = _firestore.collection('vendors').doc(uid).snapshots();
-    _loadCarrier();
-  }
-
-  Future<void> _loadCarrier() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    final doc = await _firestore.collection('vendors').doc(uid).get();
-    if (!doc.exists || !mounted) return;
-    final data = doc.data() ?? {};
-    final saved = data['defaultCarrier'] as String? ?? 'Kerry';
-    final pp = (data['promptpay'] as Map<String, dynamic>?) ?? {};
-    setState(() {
-      if (_carriers.contains(saved)) {
-        _defaultCarrier = saved;
-      } else {
-        _defaultCarrier = 'อื่นๆ';
-        _customCarrierController.text = saved;
-      }
-      _promptpayType = pp['type'] as String? ?? 'phone';
-      _promptpayNumberController.text = pp['number'] as String? ?? '';
-      _promptpayNameController.text = pp['accountName'] as String? ?? '';
-    });
-  }
-
-  Future<void> _saveCarrier() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    final carrierToSave = _defaultCarrier == 'อื่นๆ'
-        ? _customCarrierController.text.trim()
-        : _defaultCarrier;
-    if (carrierToSave.isEmpty) return;
-    try {
-      await _firestore.collection('vendors').doc(uid).update({
-        'defaultCarrier': carrierToSave,
-        'customCarrier': _defaultCarrier == 'อื่นๆ'
-            ? _customCarrierController.text.trim()
-            : '',
-      });
-    } catch (e) {
-      Fluttertoast.showToast(msg: 'บันทึกผิดพลาด: $e');
-    }
-  }
-
-  Future<void> _savePromptpay() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final number = _promptpayNumberController.text.trim();
-    final name = _promptpayNameController.text.trim();
-
-    if (number.isEmpty) {
-      Fluttertoast.showToast(msg: 'กรุณากรอกหมายเลข PromptPay');
-      return;
-    }
-    if (_promptpayType == 'phone' && number.length != 10) {
-      Fluttertoast.showToast(msg: 'เบอร์โทรต้องมี 10 หลัก');
-      return;
-    }
-    if (_promptpayType == 'national_id' && number.length != 13) {
-      Fluttertoast.showToast(msg: 'เลขบัตรประชาชนต้องมี 13 หลัก');
-      return;
-    }
-    if (!RegExp(r'^\d+$').hasMatch(number)) {
-      Fluttertoast.showToast(msg: 'หมายเลขต้องเป็นตัวเลขเท่านั้น');
-      return;
-    }
-    if (name.isEmpty) {
-      Fluttertoast.showToast(msg: 'กรุณากรอกชื่อบัญชี');
-      return;
-    }
-
-    EasyLoading.show(status: 'กำลังบันทึก...');
-    try {
-      await _firestore.collection('vendors').doc(uid).update({
-        'promptpay': {
-          'type': _promptpayType,
-          'number': number,
-          'accountName': name,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-      });
-      EasyLoading.showSuccess('บันทึกบัญชี PromptPay แล้ว');
-    } catch (e) {
-      EasyLoading.showError('ผิดพลาด: $e');
-    }
   }
 
   @override
   void dispose() {
-    _customCarrierController.dispose();
-    _promptpayNumberController.dispose();
-    _promptpayNameController.dispose();
     super.dispose();
   }
 
@@ -315,9 +208,18 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
         if (dayHours['closed'] == true) {
           isOpenNow = false;
         } else {
+          final openStr = dayHours['open'] as String?;
+          final closeStr = dayHours['close'] as String?;
+          if (openStr == null ||
+              openStr.isEmpty ||
+              closeStr == null ||
+              closeStr.isEmpty) {
+            isOpenNow = true;
+            return isOpenNow;
+          }
           try {
-            final openParts = (dayHours['open'] as String).split(':');
-            final closeParts = (dayHours['close'] as String).split(':');
+            final openParts = openStr.split(':');
+            final closeParts = closeStr.split(':');
             final openHour = int.parse(openParts[0]);
             final openMinute = int.parse(openParts[1]);
             final closeHour = int.parse(closeParts[0]);
@@ -352,56 +254,6 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(height * 0.05.sp),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.r),
-          child: AppBar(
-            leading: Padding(
-              padding: EdgeInsets.only(left: 12.0.w),
-              child: IconButton(
-                icon: Icon(IconlyLight.profile, size: 20.sp),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const VendorProfileEditPage(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            title: Text(
-              'ตั้งค่าเวลาร้านค้า',
-              style: styles(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: mainColor,
-            foregroundColor: Colors.white,
-            actions: [
-              Padding(
-                padding: EdgeInsets.only(right: 12.w),
-                child: IconButton(
-                  icon: Icon(IconlyLight.logout, size: 20.sp),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const LogOutPage(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-            centerTitle: true,
-            elevation: 0,
-          ),
-        ),
-      ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _vendorStream,
         builder: (context, snapshot) {
@@ -436,45 +288,50 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(height: 12.h),
-
-                DropdownButtonFormField<String>(
-                  initialValue: _defaultCarrier,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'ขนส่ง Ecommerce',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _carriers
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c,
-                          child: Text(
-                            c,
-                            style: styles(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w400,
-                            ),
+                SizedBox(height: 20.h),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        IconlyLight.profile,
+                        size: 26.sp,
+                        color: context.isDark ? Colors.black54 : mainColor,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const VendorProfileEditPage(),
                           ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) {
-                    setState(() => _defaultCarrier = v ?? 'Kerry');
-                    _saveCarrier();
-                  },
-                ),
-                if (_defaultCarrier == 'อื่นๆ') ...[
-                  SizedBox(height: 8.h),
-                  TextField(
-                    controller: _customCarrierController,
-                    decoration: const InputDecoration(
-                      labelText: 'ชื่อขนส่ง',
-                      border: OutlineInputBorder(),
+                        );
+                      },
                     ),
-                    onChanged: (_) => _saveCarrier(),
-                  ),
-                ],
+                    Text(
+                      'ตั้งค่าเวลาร้านค้า',
+                      style: styles(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w600,
+                        color: context.isDark ? Colors.black54 : mainColor,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        IconlyLight.logout,
+                        size: 26.sp,
+                        color: context.isDark ? Colors.black54 : mainColor,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LogOutPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
 
                 SizedBox(height: 16.h),
                 ..._days.asMap().entries.map((entry) {
@@ -485,7 +342,7 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
                       hours[fullKey] ??
                       {'open': null, 'close': null, 'closed': false};
                   return Padding(
-                    padding: EdgeInsets.only(bottom: 6.h),
+                    padding: EdgeInsets.only(bottom: 2.h),
                     child: TimeSelectorWidget(
                       key: ValueKey(
                         '$shortDay-${dayEntry['closed']}-${dayEntry['open'] ?? ''}-${dayEntry['close'] ?? ''}',
@@ -504,7 +361,7 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
                     ),
                   );
                 }),
-                SizedBox(height: 30.h),
+                SizedBox(height: 40.h),
                 Padding(
                   padding: EdgeInsetsGeometry.only(
                     left: 20.w,

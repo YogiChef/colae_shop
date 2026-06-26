@@ -37,29 +37,36 @@ class InputTextfield extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 10.h),
+      padding: EdgeInsets.symmetric(vertical: 6.h),
       child: TextFormField(
         initialValue: initialValue,
         onChanged: onChanged,
         validator: validator,
         obscureText: obscureText,
+        obscuringCharacter: '*',
         keyboardType: textInputType,
         maxLength: maxLength,
         maxLines: obscureText ? 1 : maxLines,
         controller: controller,
-        style: styles(fontSize: 12.sp),
+        style: styles(fontSize: 14.sp, color: context.textColor),
         decoration: InputDecoration(
           prefixIcon: prefixIcon,
           hintText: hintText,
           label: label,
-          labelStyle: styles(fontSize: 12.sp),
+          labelStyle: styles(fontSize: 14.sp, color: context.textColor),
           suffixIcon: suffixIcon,
-          hintStyle: styles(fontSize: 12.sp),
+          hintStyle: styles(fontSize: 14.sp, color: context.textColor),
           focusedBorder: UnderlineInputBorder(
             borderSide: BorderSide(color: Colors.yellow.shade900, width: 2),
           ),
           errorBorder: const UnderlineInputBorder(
             borderSide: BorderSide(color: Colors.red, width: 2),
+          ),
+          enabledBorder: UnderlineInputBorder(
+            borderSide: BorderSide(
+              color: context.isDark ? Colors.white70 : Colors.grey,
+              width: 1,
+            ),
           ),
         ),
       ),

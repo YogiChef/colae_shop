@@ -230,7 +230,7 @@ class _StoreLocationPageState extends State<StoreLocationPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('ปักหมุดร้านค้า'),
-        backgroundColor: mainColor,
+        backgroundColor: context.isDark ? Colors.transparent : mainColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(

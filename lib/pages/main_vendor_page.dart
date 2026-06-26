@@ -670,7 +670,6 @@ class _MainVendorPageState extends State<MainVendorPage> {
       double pendingFee = (data['pendingFee'] as num?)?.toDouble() ?? 0.0;
       Timestamp? nextDueDate = data['nextDueDate'] as Timestamp?;
 
-      // ตั้งค่า nextDueDate ครั้งแรกถ้ายังไม่มี
       if (nextDueDate == null) {
         final createdAt =
             (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();

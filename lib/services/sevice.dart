@@ -80,3 +80,12 @@ Future<Uint8List?> pickStoreImage(ImageSource source) async {
     return null;
   }
 }
+
+extension ThemeContext on BuildContext {
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
+  Color get textColor => isDark ? Colors.white : Colors.black54;
+  Color get purpleColor => isDark ? Colors.grey[300]! : Colors.deepPurple[900]!;
+  Color get bgColor => isDark ? Colors.blue[700]! : Colors.grey[900]!;
+  Color get subColor => isDark ? Colors.white : Colors.grey[700]!;
+}

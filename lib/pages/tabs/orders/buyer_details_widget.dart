@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:colae_shop/pages/chats/chat_detail.dart';
@@ -105,7 +106,7 @@ class BuyerDetailsWidget extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 20.r,
-          backgroundImage: NetworkImage(buyerImageUrl),
+          backgroundImage: CachedNetworkImageProvider(buyerImageUrl),
           backgroundColor: Colors.grey.shade200,
         ),
         _buildUnreadBadge(unreadCount),

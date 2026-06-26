@@ -201,9 +201,9 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
       child: Text(
         text,
         style: styles(
-          fontSize: 16.sp,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
+          fontSize: 15.sp,
+          fontWeight: FontWeight.w500,
+          color: Colors.deepPurple[900],
         ),
       ),
     );
@@ -261,10 +261,10 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
   Widget _statusBox(String label, double amount, Color color) {
     return Expanded(
       child: Container(
-        padding: EdgeInsets.all(12.w),
+        padding: EdgeInsets.all(4.w),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.circular(4.r),
           border: Border.all(color: color.withOpacity(0.3)),
         ),
         child: Column(
@@ -278,7 +278,7 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
               '฿${amount.toStringAsFixed(0)}',
               style: TextStyle(
                 fontSize: 14.sp,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w500,
                 color: color,
               ),
             ),
@@ -293,38 +293,40 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
       padding: EdgeInsets.all(6.w),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: BorderRadius.circular(4.r),
         boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           Row(
             children: [
-              Icon(icon, size: 24.sp, color: color),
+              Icon(icon, size: 20.sp, color: color),
               SizedBox(width: 8.w),
               Expanded(
                 child: Text(
                   label,
-                  style: styles(fontSize: 12.sp, color: Colors.grey[700]),
+                  style: styles(fontSize: 12.sp, color: Colors.deepPurple[900]),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18.sp,
-              fontWeight: FontWeight.bold,
-              color: color,
+          Center(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -365,9 +367,9 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
                 barRods: [
                   BarChartRodData(
                     toY: values[i],
-                    color: mainColor,
+                    color: Colors.deepOrange,
                     width: 16.w,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ],
               );
@@ -476,12 +478,12 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
               LineChartBarData(
                 spots: spots,
                 isCurved: true,
-                color: Colors.green,
+                color: Colors.amber,
                 barWidth: 2,
                 dotData: const FlDotData(show: false),
                 belowBarData: BarAreaData(
                   show: true,
-                  color: Colors.green.withOpacity(0.15),
+                  color: Colors.amber.withOpacity(0.15),
                 ),
               ),
             ],
@@ -519,36 +521,41 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
         final d = doc.data() as Map<String, dynamic>;
         final status = d['status'] as String? ?? '';
         final checkIn = (d['checkIn'] as Timestamp).toDate();
+        final checkout = (d['checkOut'] as Timestamp).toDate();
         return Card(
           margin: EdgeInsets.only(bottom: 8.h),
           child: Row(
             children: [
               Container(
-                padding: EdgeInsets.all(12),
-                height: 90,
-                width: 90,
+                padding: EdgeInsets.all(6),
+                height: 40.sp,
+                width: 40.sp,
                 child: CircleAvatar(
-                  backgroundColor: _statusColor(status).withOpacity(0.2),
+                  backgroundColor: _statusColor(status),
                   child: Icon(
                     _statusIcon(status),
-                    color: _statusColor(status),
-                    size: 34,
+                    color: Colors.white,
+                    size: 20.sp,
                   ),
                 ),
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 6.w,
+                    vertical: 12.w,
+                  ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           Text(
                             d['guestName'] ?? '-',
                             style: styles(
-                              fontSize: 13.sp,
+                              fontSize: 12.sp,
                               fontWeight: FontWeight.w400,
+                              color: Colors.deepPurple[900],
                             ),
                           ),
                           Spacer(),
@@ -556,31 +563,24 @@ class _HotelEarningsTabState extends State<HotelEarningsTab> {
                             '฿${(d['totalPrice'] as num?)?.toStringAsFixed(0) ?? '0'}',
                             style: TextStyle(
                               fontSize: 12.sp,
-                              fontWeight: FontWeight.bold,
-                              color: mainColor,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.deepPurple[900],
                             ),
                           ),
                         ],
                       ),
 
-                      Row(
-                        children: [
-                          Text(
-                            '${d['roomName'] ?? '-'} • ${DateFormat('d MMM').format(checkIn)} • ${d['nights']} คืน',
-                            style: styles(
-                              fontSize: 12.sp,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Spacer(),
-                          Text(
-                            _statusLabel(status),
-                            style: styles(
-                              fontSize: 12.sp,
-                              color: _statusColor(status),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        '${d['roomName'] ?? '-'} / ${DateFormat('d MMM').format(checkIn)} - ${DateFormat('d MMM').format(checkout)} / ${d['nights']} คืน',
+                        style: styles(fontSize: 11.sp, color: Colors.grey[700]),
+                      ),
+
+                      Text(
+                        _statusLabel(status),
+                        style: styles(
+                          fontSize: 11.sp,
+                          color: _statusColor(status),
+                        ),
                       ),
                     ],
                   ),

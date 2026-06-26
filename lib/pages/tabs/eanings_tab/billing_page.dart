@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:promptpay_qrcode_generate/promptpay_qrcode_generate.dart';
@@ -359,8 +360,8 @@ class _BillingPageState extends State<BillingPage>
           'สรุปค่าบริการรายเดือน',
           style: styles(
             fontSize: 18.sp,
-            fontWeight: FontWeight.w500,
-            color: Colors.black54,
+            fontWeight: FontWeight.w600,
+            color: Colors.deepPurple[900],
           ),
         ),
         centerTitle: true,
@@ -440,11 +441,12 @@ class _BillingPageState extends State<BillingPage>
                       Text(
                         'กราฟรายได้รายเดือน',
                         style: styles(
-                          fontSize: 16.sp,
+                          fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
+                          color: Colors.deepPurple[900],
                         ),
                       ),
-                      SizedBox(height: 16.h),
+                      SizedBox(height: 24.h),
                       SizedBox(
                         height: 250.h,
                         child: BarChart(
@@ -462,7 +464,7 @@ class _BillingPageState extends State<BillingPage>
                                         index < monthlyData.length) {
                                       return Text(
                                         monthlyData[index]['month'],
-                                        style: styles(fontSize: 10.sp),
+                                        style: styles(fontSize: 7.sp),
                                       );
                                     }
                                     return const SizedBox();
@@ -472,13 +474,13 @@ class _BillingPageState extends State<BillingPage>
                               leftTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
-                                  reservedSize: 40,
+                                  reservedSize: 30,
                                   getTitlesWidget: (value, meta) {
                                     return Text(
                                       value.toInt().toString(),
                                       style: styles(
                                         color: Colors.black54,
-                                        fontSize: 10.sp,
+                                        fontSize: 5.sp,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     );
@@ -488,7 +490,7 @@ class _BillingPageState extends State<BillingPage>
                               rightTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
-                                  reservedSize: 30,
+                                  reservedSize: 24,
                                   getTitlesWidget: (value, meta) {
                                     final double val = value.toDouble();
                                     String text;
@@ -503,7 +505,7 @@ class _BillingPageState extends State<BillingPage>
                                       text,
                                       style: styles(
                                         color: Colors.black54,
-                                        fontSize: 10.sp,
+                                        fontSize: 5.sp,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     );
@@ -522,8 +524,9 @@ class _BillingPageState extends State<BillingPage>
                       Text(
                         'ข้อมูลรายเดือน',
                         style: styles(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.deepPurple[900],
                         ),
                       ),
                       SizedBox(height: 8.h),
@@ -619,6 +622,174 @@ class _BillingPageState extends State<BillingPage>
                         const Center(
                           child: Text('ยังไม่มีข้อมูลยอดขายรายเดือน'),
                         ),
+                      SizedBox(height: 12.h),
+                      StreamBuilder<DocumentSnapshot>(
+                        stream: firestore
+                            .collection('vendors')
+                            .doc(auth.currentUser!.uid)
+                            .snapshots(),
+                        builder: (context, snap) {
+                          if (!snap.hasData) {
+                            return SizedBox(
+                              height: 100.h,
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+
+                          final vData =
+                              snap.data!.data() as Map<String, dynamic>? ?? {};
+                          final ratingCount =
+                              (vData['ratingCount'] as num?)?.toInt() ?? 0;
+
+                          if (ratingCount == 0) {
+                            return Card(
+                              margin: EdgeInsets.only(bottom: 16.h),
+                              child: Padding(
+                                padding: EdgeInsets.all(16.w),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.star_border,
+                                      color: Colors.grey,
+                                      size: 32.sp,
+                                    ),
+                                    SizedBox(width: 12.w),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'ยังไม่มีรีวิวจากลูกค้า',
+                                            style: styles(
+                                              fontSize: 14.sp,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4.h),
+                                          Text(
+                                            'รีวิวจะปรากฏเมื่อมีลูกค้าให้คะแนนสินค้า',
+                                            style: styles(
+                                              fontSize: 12.sp,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+
+                          final avgOverall =
+                              (vData['averageRating'] as num?)?.toDouble() ??
+                              0.0;
+                          final tasteAvg =
+                              (vData['tasteAvg'] as num?)?.toDouble() ?? 0.0;
+                          final cleanlinessAvg =
+                              (vData['cleanlinessAvg'] as num?)?.toDouble() ??
+                              0.0;
+                          final serviceAvg =
+                              (vData['serviceAvg'] as num?)?.toDouble() ?? 0.0;
+                          final speedAvg =
+                              (vData['speedAvg'] as num?)?.toDouble() ?? 0.0;
+
+                          return Container(
+                            padding: EdgeInsets.all(16.w),
+
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'รีวิวจากลูกค้า',
+                                      style: styles(
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.deepPurple[900],
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '$ratingCount',
+                                          style: styles(
+                                            fontSize: 14.sp,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.deepPurple[900],
+                                          ),
+                                        ),
+                                        SizedBox(width: 8.w),
+                                        Icon(
+                                          IconlyBold.profile,
+                                          size: 20.sp,
+                                          color: Colors.deepPurple[900],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 12.h),
+                                Divider(
+                                  height: 1.h,
+                                  color: Colors.grey.shade300,
+                                ),
+                                SizedBox(height: 8.h),
+                                _ratingRow('รสชาติ', tasteAvg),
+                                _ratingRow('ความสะอาด', cleanlinessAvg),
+                                _ratingRow('การบริการ', serviceAvg),
+                                _ratingRow('ความรวดเร็ว', speedAvg),
+                                SizedBox(height: 12.h),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'ค่าเฉลี่ยทั้งหมด',
+                                      style: styles(
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.w500,
+                                        color: serviceAvg >= 4.5
+                                            ? Colors.deepPurple[900]
+                                            : Colors.deepOrange,
+                                      ),
+                                    ),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.star,
+                                          color: serviceAvg >= 4.5
+                                              ? Colors.deepPurple[900]
+                                              : Colors.amber,
+                                          size: 24.sp,
+                                        ),
+                                        SizedBox(width: 4.w),
+                                        Text(
+                                          avgOverall.toStringAsFixed(2),
+                                          style: styles(
+                                            fontSize: 14.sp,
+                                            fontWeight: FontWeight.w500,
+                                            color: serviceAvg >= 4.5
+                                                ? Colors.deepPurple[900]
+                                                : Colors.deepOrange,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
 
                       SizedBox(height: 20.h),
                       if (pendingFee > 0)
@@ -673,6 +844,50 @@ class _BillingPageState extends State<BillingPage>
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _ratingRow(String label, double value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4.h),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: styles(
+                  fontSize: 12.sp,
+                  color: value >= 4.5 ? Colors.deepPurple[900] : Colors.black87,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              Row(
+                children: [
+                  Icon(
+                    Icons.star,
+                    color: value >= 4.5 ? Colors.green[700] : Colors.amber,
+                    size: 20.sp,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    value.toStringAsFixed(2),
+                    style: styles(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w400,
+                      color: value >= 4.5
+                          ? Colors.deepPurple[900]
+                          : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Divider(height: 1.h, color: Colors.grey.shade300),
+        ],
       ),
     );
   }

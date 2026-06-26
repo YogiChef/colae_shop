@@ -44,7 +44,7 @@ class _EditPageState extends State<EditPage>
           appBar: AppBar(
             elevation: 0,
             centerTitle: true,
-            backgroundColor: mainColor,
+            backgroundColor: context.isDark ? Colors.transparent : mainColor,
             automaticallyImplyLeading: false,
             title: Text(
               'แก้ไขสินค้า',

@@ -158,11 +158,11 @@ class _ReferralQrPageState extends State<ReferralQrPage> {
                   backgroundColor: Colors.white,
                   eyeStyle: QrEyeStyle(
                     eyeShape: QrEyeShape.square,
-                    color: color,
+                    color: Colors.black54,
                   ),
                   dataModuleStyle: QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
-                    color: color,
+                    color: Colors.black54,
                   ),
                 ),
                 SizedBox(height: 12.h),
@@ -171,7 +171,7 @@ class _ReferralQrPageState extends State<ReferralQrPage> {
                   style: styles(
                     fontSize: 12.sp,
                     fontWeight: FontWeight.w700,
-                    color: color,
+                    color: Colors.deepPurple[900],
                   ),
                 ),
               ],

@@ -155,95 +155,86 @@ class _TimeSelectorWidgetState extends State<TimeSelectorWidget> {
     return Flexible(
       child: Padding(
         padding: EdgeInsets.only(left: 12.w, right: 12.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Text(
-                  widget.dayLabel,
-                  style: styles(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w600,
-                    color: mainColor,
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                Flexible(
-                  child: InkWell(
-                    onTap: () => _selectTime(true),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 13.sp,
-                          color: Colors.black87,
-                        ),
-                        SizedBox(width: 4.w),
-                        Text(
-                          openText,
-                          style: styles(
-                            fontSize: 12.sp,
-                            fontWeight: _openTime != null
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ],
+            Text(
+              widget.dayLabel,
+              style: styles(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+                color: Colors.deepPurple[900],
+              ),
+            ),
+            SizedBox(width: 12.w),
+            Flexible(
+              child: InkWell(
+                onTap: () => _selectTime(true),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.access_time, size: 16.sp, color: Colors.black87),
+                    SizedBox(width: 4.w),
+                    Text(
+                      openText,
+                      style: styles(
+                        fontSize: 12.sp,
+                        fontWeight: _openTime != null
+                            ? FontWeight.w500
+                            : FontWeight.normal,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _selectTime(false),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 13.sp,
-                          color: Colors.red.shade700,
-                        ),
-                        SizedBox(width: 4.w),
-                        Text(
-                          closeText,
-                          style: styles(
-                            fontSize: 12.sp,
-                            fontWeight: _closeTime != null
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                            color: Colors.red.shade700,
-                          ),
-                        ),
-                      ],
+              ),
+            ),
+            Expanded(
+              child: InkWell(
+                onTap: () => _selectTime(false),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 16.sp,
+                      color: Colors.red.shade700,
                     ),
-                  ),
+                    SizedBox(width: 4.w),
+                    Text(
+                      closeText,
+                      style: styles(
+                        fontSize: 12.sp,
+                        fontWeight: _closeTime != null
+                            ? FontWeight.w500
+                            : FontWeight.normal,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ],
                 ),
-                Transform.scale(
-                  scale: 0.75.r,
+              ),
+            ),
+            Transform.scale(
+              scale: 0.85.r,
 
-                  child: Switch(
-                    padding: EdgeInsets.all(2.w),
-                    value: !isClosed, // true = เปิด (switch on)
-                    onChanged: (value) {
-                      setState(() {
-                        isClosed = !value; // value=true=เปิด -> _isClosed=false
-                      });
-                      widget.onClosed?.call(isClosed); // Call parent
-                      if (isClosed) {
-                        _openTime = null;
-                        _closeTime = null;
-                      }
-                    },
-                    activeThumbColor: mainColor, // สีเมื่อเปิด
-                    activeTrackColor: mainColor.withAlpha(50),
-                    inactiveThumbColor: Colors.red, // สีเมื่อปิด
-                    inactiveTrackColor: Colors.red.withAlpha(50),
-                    trackOutlineColor: WidgetStateProperty.all(Colors.grey),
-                  ),
-                ),
-              ],
+              child: Switch(
+                padding: EdgeInsets.all(2.w),
+                value: !isClosed,
+                onChanged: (value) {
+                  setState(() {
+                    isClosed = !value;
+                  });
+                  widget.onClosed?.call(isClosed);
+                  if (isClosed) {
+                    _openTime = null;
+                    _closeTime = null;
+                  }
+                },
+                activeThumbColor: mainColor,
+                activeTrackColor: mainColor.withAlpha(50),
+                inactiveThumbColor: Colors.red,
+                inactiveTrackColor: Colors.red.withAlpha(50),
+                trackOutlineColor: WidgetStateProperty.all(Colors.grey),
+              ),
             ),
           ],
         ),

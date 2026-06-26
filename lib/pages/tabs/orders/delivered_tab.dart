@@ -1,5 +1,6 @@
 // ignore_for_file: unnecessary_to_list_in_spreads
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -30,6 +31,244 @@ class _DeliveredState extends State<Delivered>
         .orderBy('timestamp', descending: true)
         .limit(50)
         .snapshots();
+  }
+
+  Future<void> _showCustomerRatingDialog({
+    required BuildContext context,
+    required String orderId,
+    required String customerId,
+    required String customerName,
+    Map<String, dynamic>? existingReview,
+  }) async {
+    int politeness =
+        (existingReview?['ratings']?['politeness'] as num?)?.toInt() ?? 0;
+    int punctuality =
+        (existingReview?['ratings']?['punctuality'] as num?)?.toInt() ?? 0;
+    int payment =
+        (existingReview?['ratings']?['payment'] as num?)?.toInt() ?? 0;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          Widget starRow(String label, int value, ValueChanged<int> onSet) {
+            return Padding(
+              padding: EdgeInsets.symmetric(vertical: 6.h),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      label,
+                      style: styles(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (i) {
+                        final filled = i < value;
+                        return InkWell(
+                          onTap: () => onSet(i + 1),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 2.w),
+                            child: Icon(
+                              filled ? Icons.star : Icons.star_border,
+                              color: filled ? Colors.amber : Colors.grey,
+                              size: 26.sp,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final canSubmit = politeness > 0 && punctuality > 0 && payment > 0;
+
+          return AlertDialog(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  existingReview != null ? 'แก้ไขรีวิวลูกค้า' : 'รีวิวลูกค้า',
+                  style: styles(fontSize: 16.sp, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 4.h),
+                if (customerName.isNotEmpty)
+                  Text(
+                    customerName,
+                    style: styles(fontSize: 12.sp, color: Colors.grey[700]),
+                  ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  starRow(
+                    'ความสุภาพ',
+                    politeness,
+                    (v) => setSt(() => politeness = v),
+                  ),
+                  starRow(
+                    'ความตรงต่อเวลา',
+                    punctuality,
+                    (v) => setSt(() => punctuality = v),
+                  ),
+                  starRow(
+                    'การจ่ายเงิน',
+                    payment,
+                    (v) => setSt(() => payment = v),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('ยกเลิก'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canSubmit ? mainColor : Colors.grey,
+                ),
+                onPressed: canSubmit ? () => Navigator.pop(ctx, true) : null,
+                child: Text(
+                  existingReview != null ? 'บันทึก' : 'ส่งรีวิว',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result != true || !context.mounted) return;
+
+    await _submitCustomerRating(
+      orderId: orderId,
+      customerId: customerId,
+      reviewerType: 'vendor',
+      ratings: {
+        'politeness': politeness,
+        'punctuality': punctuality,
+        'payment': payment,
+      },
+      existingReview: existingReview,
+      context: context,
+    );
+  }
+
+  Future<void> _submitCustomerRating({
+    required String orderId,
+    required String customerId,
+    required String reviewerType,
+    required Map<String, int> ratings,
+    required Map<String, dynamic>? existingReview,
+    required BuildContext context,
+  }) async {
+    final reviewerId = auth.currentUser!.uid;
+    final reviewDocId = '${reviewerId}_$orderId';
+    final newAverage = ratings.values.reduce((a, b) => a + b) / ratings.length;
+
+    try {
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final reviewRef = FirebaseFirestore.instance
+            .collection('customer_reviews')
+            .doc(reviewDocId);
+        final customerRef = FirebaseFirestore.instance
+            .collection('buyers')
+            .doc(customerId);
+
+        final customerSnap = await tx.get(customerRef);
+
+        final oldAvg =
+            (customerSnap.data()?['averageRating'] as num?)?.toDouble() ?? 0.0;
+        final oldCount =
+            (customerSnap.data()?['ratingCount'] as num?)?.toInt() ?? 0;
+
+        double newCustomerAvg;
+        int newCustomerCount;
+
+        if (existingReview != null) {
+          final oldReviewAvg =
+              (existingReview['average'] as num?)?.toDouble() ?? 0.0;
+          newCustomerCount = oldCount;
+          newCustomerAvg = oldCount > 0
+              ? ((oldAvg * oldCount) - oldReviewAvg + newAverage) / oldCount
+              : newAverage;
+        } else {
+          newCustomerCount = oldCount + 1;
+          newCustomerAvg =
+              ((oldAvg * oldCount) + newAverage) / newCustomerCount;
+        }
+
+        final dimAvgs = <String, double>{};
+        for (final dim in ['politeness', 'payment']) {
+          if (!ratings.containsKey(dim)) continue;
+          final oldDimAvg =
+              (customerSnap.data()?['${dim}Avg'] as num?)?.toDouble() ?? 0.0;
+          final newDimValue = ratings[dim]!;
+          double newDimAvg;
+          if (existingReview != null) {
+            final oldDimValue =
+                (existingReview['ratings']?[dim] as num?)?.toInt() ?? 0;
+            newDimAvg = oldCount > 0
+                ? ((oldDimAvg * oldCount) - oldDimValue + newDimValue) /
+                      oldCount
+                : newDimValue.toDouble();
+          } else {
+            newDimAvg =
+                ((oldDimAvg * oldCount) + newDimValue) / newCustomerCount;
+          }
+          dimAvgs['${dim}Avg'] = double.parse(newDimAvg.toStringAsFixed(2));
+        }
+
+        tx.set(reviewRef, {
+          'reviewerId': reviewerId,
+          'reviewerType': reviewerType,
+          'customerId': customerId,
+          'orderId': orderId,
+          'ratings': ratings,
+          'average': newAverage,
+          'updatedAt': FieldValue.serverTimestamp(),
+          if (existingReview == null) 'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        tx.set(customerRef, {
+          'averageRating': double.parse(newCustomerAvg.toStringAsFixed(2)),
+          'ratingCount': newCustomerCount,
+          ...dimAvgs,
+        }, SetOptions(merge: true));
+      });
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              existingReview != null ? 'แก้รีวิวแล้ว' : 'ขอบคุณที่รีวิวลูกค้า!',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ผิดพลาด: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -130,16 +369,16 @@ class _DeliveredState extends State<Delivered>
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.symmetric(
-                    vertical: 16.h,
+                    vertical: 4.h,
                     horizontal: 16.w,
                   ),
                   color: Colors.grey.shade300,
                   child: Text(
                     dateKey,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: styles(
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Colors.black87,
+                      color: context.textColor,
                     ),
                   ),
                 ),
@@ -151,6 +390,9 @@ class _DeliveredState extends State<Delivered>
                       orderData['serviceType']?.toString() ?? 'pickup';
                   final String tableId = orderData['tableId']?.toString() ?? '';
                   final String orderId = orderData['orderId']?.toString() ?? '';
+                  final String buyerId = orderData['buyerId']?.toString() ?? '';
+                  final String orderStatus =
+                      orderData['status']?.toString() ?? '';
                   final bool isDineIn =
                       serviceType == 'dine-in' || tableId.isNotEmpty;
                   final bool isSelfDeliver = orderData['selfDeliver'] ?? false;
@@ -160,7 +402,6 @@ class _DeliveredState extends State<Delivered>
                       (orderData['riderEarnings'] as num?)?.toDouble() ?? 00;
                   final double vendorEarnings =
                       (orderData['vendorEarnings'] as num?)?.toDouble() ?? 0.0;
-                  // totalPrice = foodTotal + customerShipping
 
                   final Map<String, dynamic> bi =
                       (orderData['buyerInfo'] as Map<String, dynamic>?) ?? {};
@@ -227,7 +468,9 @@ class _DeliveredState extends State<Delivered>
                   }
 
                   IconData serviceIcon = Icons.store;
-                  Color serviceColor = Colors.blue.shade900;
+                  Color serviceColor = context.isDark
+                      ? Colors.lightBlue
+                      : Colors.blue.shade900;
                   String serviceLabel = 'รับที่ร้าน';
                   if (isDineIn) {
                     serviceIcon = Icons.table_restaurant;
@@ -297,7 +540,7 @@ class _DeliveredState extends State<Delivered>
                                 style: styles(
                                   fontSize: 12.sp,
                                   fontWeight: FontWeight.w500,
-                                  color: Colors.black54,
+                                  color: context.textColor,
                                 ),
                               ),
                               Row(
@@ -308,7 +551,7 @@ class _DeliveredState extends State<Delivered>
                                     children: [
                                       Icon(
                                         serviceIcon,
-                                        size: 32.w,
+                                        size: 24.w,
                                         color: serviceColor,
                                       ),
                                       SizedBox(width: 8.w),
@@ -366,7 +609,9 @@ class _DeliveredState extends State<Delivered>
                             '${DateFormat('HH:mm').format(timestamp.toDate())} → ${DateFormat('HH:mm').format(deliveredTime.toDate())}',
                             style: styles(
                               fontSize: 11.sp,
-                              color: Colors.blue.shade900,
+                              color: context.isDark
+                                  ? Colors.lightBlue
+                                  : Colors.blue.shade900,
                               height: 1,
                             ),
                           ),
@@ -381,6 +626,7 @@ class _DeliveredState extends State<Delivered>
                                     style: TextStyle(
                                       fontSize: 13.sp,
                                       fontWeight: FontWeight.w500,
+                                      color: context.textColor,
                                     ),
                                   ),
                                   SizedBox(height: 8.h),
@@ -426,7 +672,9 @@ class _DeliveredState extends State<Delivered>
                                             style: styles(
                                               fontSize: 13.sp,
                                               fontWeight: FontWeight.w500,
-                                              color: Colors.indigo.shade900,
+                                              color: context.isDark
+                                                  ? Colors.lightBlue
+                                                  : Colors.indigo.shade900,
                                             ),
                                           ),
                                           if (optionsText.isNotEmpty)
@@ -434,7 +682,7 @@ class _DeliveredState extends State<Delivered>
                                               optionsText,
                                               style: styles(
                                                 fontSize: 12.sp,
-                                                color: Colors.black45,
+                                                color: context.textColor,
                                               ),
                                             ),
 
@@ -446,13 +694,13 @@ class _DeliveredState extends State<Delivered>
                                                 '฿${price.toStringAsFixed(2)} x $quantity',
                                                 style: styles(
                                                   fontSize: 12.sp,
-                                                  color: Colors.black45,
+                                                  color: context.textColor,
                                                 ),
                                               ),
                                               Text(
                                                 '= ฿${itemSubtotal.toStringAsFixed(2)}',
                                                 style: styles(
-                                                  color: Colors.black45,
+                                                  color: context.textColor,
                                                   fontWeight: FontWeight.w400,
                                                   fontSize: 12.sp,
                                                 ),
@@ -522,20 +770,20 @@ class _DeliveredState extends State<Delivered>
                                       final TextStyle cancelledStyle = styles(
                                         fontSize: 12.sp,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.black54,
+                                        color: context.textColor,
                                         decoration: TextDecoration.lineThrough,
                                       );
                                       final TextStyle cancelledSmallStyle =
                                           styles(
                                             fontSize: 12.sp,
-                                            color: Colors.black45,
+                                            color: context.textColor,
                                             decoration:
                                                 TextDecoration.lineThrough,
                                           );
                                       final TextStyle cancelledPriceStyle =
                                           styles(
                                             fontSize: 12.sp,
-                                            color: Colors.black45,
+                                            color: context.textColor,
                                             fontWeight: FontWeight.w600,
                                             decoration:
                                                 TextDecoration.lineThrough,
@@ -643,7 +891,7 @@ class _DeliveredState extends State<Delivered>
                                               'ยอดรวมสินค้า',
                                               style: styles(
                                                 fontSize: 12.sp,
-                                                color: Colors.black54,
+                                                color: context.textColor,
                                                 fontWeight: FontWeight.w400,
                                               ),
                                             ),
@@ -652,7 +900,7 @@ class _DeliveredState extends State<Delivered>
                                               style: styles(
                                                 fontSize: 12.sp,
                                                 fontWeight: FontWeight.w400,
-                                                color: Colors.black87,
+                                                color: context.textColor,
                                               ),
                                             ),
                                           ],
@@ -700,7 +948,7 @@ class _DeliveredState extends State<Delivered>
                                               style: TextStyle(
                                                 fontSize: 12.sp,
                                                 fontWeight: FontWeight.w400,
-                                                color: Colors.black87,
+                                                color: context.textColor,
                                               ),
                                             ),
                                             Text(
@@ -708,7 +956,7 @@ class _DeliveredState extends State<Delivered>
                                               style: styles(
                                                 fontSize: 12.sp,
                                                 fontWeight: FontWeight.w400,
-                                                color: Colors.black87,
+                                                color: context.textColor,
                                               ),
                                             ),
                                           ],
@@ -723,6 +971,7 @@ class _DeliveredState extends State<Delivered>
                                     style: styles(
                                       fontSize: 13.sp,
                                       fontWeight: FontWeight.w600,
+                                      color: context.textColor,
                                     ),
                                   ),
                                   SizedBox(height: 8.h),
@@ -738,7 +987,9 @@ class _DeliveredState extends State<Delivered>
                                         child: CircleAvatar(
                                           radius: 20.r,
                                           backgroundImage: buyerImageUrl != null
-                                              ? NetworkImage(buyerImageUrl)
+                                              ? CachedNetworkImageProvider(
+                                                  buyerImageUrl,
+                                                )
                                               : null,
                                           child: buyerImageUrl == null
                                               ? const Icon(Icons.person)
@@ -754,7 +1005,7 @@ class _DeliveredState extends State<Delivered>
                                               fullName,
                                               style: styles(
                                                 fontSize: 13.sp,
-                                                color: Colors.black54,
+                                                color: context.textColor,
                                               ),
                                             ),
                                             Text(
@@ -762,7 +1013,7 @@ class _DeliveredState extends State<Delivered>
                                               maxLines: 3,
                                               style: styles(
                                                 fontSize: 11.sp,
-                                                color: Colors.black54,
+                                                color: context.textColor,
                                               ),
                                             ),
                                             if (phone.isNotEmpty) ...[
@@ -778,7 +1029,7 @@ class _DeliveredState extends State<Delivered>
                                                     phone,
                                                     style: styles(
                                                       fontSize: 12.sp,
-                                                      color: Colors.black54,
+                                                      color: context.textColor,
                                                     ),
                                                   ),
                                                 ],
@@ -797,7 +1048,7 @@ class _DeliveredState extends State<Delivered>
                                                     email,
                                                     style: styles(
                                                       fontSize: 12.sp,
-                                                      color: Colors.black54,
+                                                      color: context.textColor,
                                                     ),
                                                   ),
                                                 ],
@@ -808,6 +1059,58 @@ class _DeliveredState extends State<Delivered>
                                       ),
                                     ],
                                   ),
+                                  if (orderStatus == 'delivered' &&
+                                      buyerId.isNotEmpty) ...[
+                                    SizedBox(height: 8.h),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: FutureBuilder<DocumentSnapshot>(
+                                        future: FirebaseFirestore.instance
+                                            .collection('customer_reviews')
+                                            .doc(
+                                              '${auth.currentUser!.uid}_$orderId',
+                                            )
+                                            .get(),
+                                        builder: (context, snap) {
+                                          if (!snap.hasData) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          final exists = snap.data!.exists;
+                                          final existingData = exists
+                                              ? snap.data!.data()
+                                                    as Map<String, dynamic>
+                                              : null;
+                                          return TextButton.icon(
+                                            icon: Icon(
+                                              exists ? Icons.edit : Icons.star,
+                                              size: 20.sp,
+                                              color: exists
+                                                  ? Colors.amber[800]
+                                                  : Colors.blue[700],
+                                            ),
+                                            label: Text(
+                                              exists ? 'แก้ไข' : 'รีวิว',
+                                              style: styles(
+                                                fontSize: 12.sp,
+                                                color: exists
+                                                    ? Colors.amber[800]
+                                                    : Colors.blue[700],
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            onPressed: () =>
+                                                _showCustomerRatingDialog(
+                                                  context: context,
+                                                  orderId: orderId,
+                                                  customerId: buyerId,
+                                                  customerName: fullName,
+                                                  existingReview: existingData,
+                                                ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

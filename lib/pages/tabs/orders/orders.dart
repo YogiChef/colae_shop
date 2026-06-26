@@ -31,7 +31,7 @@ class _OrderPageState extends State<OrderPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: mainColor,
+        backgroundColor: context.isDark ? Colors.transparent : mainColor,
         automaticallyImplyLeading: false,
         title: Text(
           'ออร์เดอร์',

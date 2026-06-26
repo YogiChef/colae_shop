@@ -2,7 +2,9 @@
 
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart';
 import 'package:colae_shop/auth/landing_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -58,6 +60,9 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
   bool _loading = true;
   bool _saving = false;
   ThaiAddress? _selectedAddress;
+  Province? _initialProvince;
+  District? _initialDistrict;
+  SubDistrict? _initialSubDistrict;
 
   @override
   void initState() {
@@ -100,6 +105,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
           _nameController.text = d['name'] ?? '';
           _mainType = d['mainType'];
           _descController.text = d['description'] ?? '';
+          _addressController.text = d['address'] ?? '';
           _provinceController.text =
               _selectedAddress?.provinceTh ?? d['province'] ?? '';
           _districtController.text =
@@ -128,6 +134,40 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
             }
           }
         });
+      }
+      // Lookup Province/District/SubDistrict objects for ThaiAddressForm initial values
+      if (doc.exists) {
+        final d = doc.data()!;
+        try {
+          final repo = ThaiAddressRepository();
+          await repo.initialize();
+
+          final provinceName = d['province'] as String? ?? '';
+          final districtName = d['district'] as String? ?? '';
+          final subDistrictName = d['subDistrict'] as String? ?? '';
+
+          if (provinceName.isNotEmpty) {
+            _initialProvince = repo.provinces.firstWhereOrNull(
+              (p) => p.nameTh == provinceName,
+            );
+            if (_initialProvince != null && districtName.isNotEmpty) {
+              _initialDistrict = repo.districts.firstWhereOrNull(
+                (x) =>
+                    x.nameTh == districtName &&
+                    x.provinceId == _initialProvince!.id,
+              );
+              if (_initialDistrict != null && subDistrictName.isNotEmpty) {
+                _initialSubDistrict = repo.subDistricts.firstWhereOrNull(
+                  (x) =>
+                      x.nameTh == subDistrictName &&
+                      x.districtId == _initialDistrict!.id,
+                );
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error loading address objects: $e');
+        }
       }
     } catch (e) {
       debugPrint('Error loading hotel: $e');
@@ -348,7 +388,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(16.w),
+          padding: EdgeInsets.all(20.w),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -362,7 +402,21 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                     fontSize: 13.spMax,
                     fontWeight: FontWeight.w400,
                   ),
-                  border: OutlineInputBorder(),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                 ),
                 validator: (v) =>
                     (v?.trim().isEmpty ?? true) ? 'กรุณากรอกชื่อที่พัก' : null,
@@ -372,9 +426,23 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                 initialValue: _mainTypeOptions.contains(_mainType)
                     ? _mainType
                     : null,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'ประเภทที่พัก *',
-                  border: OutlineInputBorder(),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                 ),
                 items: _mainTypeOptions.map((t) {
                   return DropdownMenuItem(
@@ -405,7 +473,21 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                     fontSize: 13.spMax,
                     fontWeight: FontWeight.w400,
                   ),
-                  border: OutlineInputBorder(),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                 ),
               ),
               SizedBox(height: 12.w),
@@ -420,17 +502,101 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                     fontSize: 13.spMax,
                     fontWeight: FontWeight.w400,
                   ),
-                  border: const OutlineInputBorder(),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
                 ),
               ),
               SizedBox(height: 12.w),
               ThaiAddressForm(
+                initialProvince: _initialProvince,
+                initialDistrict: _initialDistrict,
+                initialSubDistrict: _initialSubDistrict,
                 textStyle: styles(
                   fontSize: 13.sp,
                   color: Colors.black87,
                   fontWeight: FontWeight.w500,
                 ),
-
+                provinceDecoration: InputDecoration(
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                districtDecoration: InputDecoration(
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                subDistrictDecoration: InputDecoration(
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                zipCodeDecoration: InputDecoration(
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: Colors.yellow.shade900,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: context.isDark ? Colors.white70 : Colors.grey,
+                      width: 1,
+                    ),
+                  ),
+                ),
                 onChanged: (address) {
                   if ((address.provinceTh ?? '').isEmpty) return;
                   if ((address.districtTh ?? '').isEmpty) return;
@@ -464,10 +630,17 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
                     ),
                   ),
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.my_location, size: 16),
-                    label: const Text('ใช้ตำแหน่งปัจจุบัน'),
+                    icon: Icon(Icons.my_location, size: 20.sp),
+                    label: Text(
+                      'ตำแหน่งปัจจุบัน',
+                      style: styles(
+                        fontSize: 14.sp,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: mainColor,
+                      backgroundColor: Colors.deepOrange,
                       foregroundColor: Colors.white,
                     ),
                     onPressed: _getCurrentLocation,
@@ -554,8 +727,8 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
             text,
             style: styles(
               fontSize: 15.sp,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              fontWeight: FontWeight.w500,
+              color: Colors.deepPurple[900],
             ),
           ),
         ],
@@ -569,7 +742,7 @@ class _HotelInfoTabState extends State<HotelInfoTab> {
     for (int i = 0; i < _existingImages.length; i++) {
       allItems.add(
         _imageItem(
-          image: NetworkImage(_existingImages[i]),
+          image: CachedNetworkImageProvider(_existingImages[i]),
           onRemove: () => _removeExistingImage(i),
         ),
       );

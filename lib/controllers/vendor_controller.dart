@@ -12,27 +12,21 @@ import 'package:colae_shop/services/sevice.dart';
 class VendorController {
   Future<void> loginUser(String email, String password) async {
     try {
-     
-
       if (email.isEmpty || password.isEmpty) {
         Fluttertoast.showToast(msg: 'กรุณากรอกข้อมูลให้ครบ');
         return;
       }
 
-      await auth
-          .signInWithEmailAndPassword(email: email, password: password);
+      await auth.signInWithEmailAndPassword(email: email, password: password);
 
-     
       Fluttertoast.showToast(msg: 'เข้าสู่ระบบสำเร็จ');
     } on FirebaseAuthException catch (e) {
-     
       Fluttertoast.showToast(
         timeInSecForIosWeb: 5,
         msg: "Login Error: ${e.message ?? e.code}",
         backgroundColor: Colors.red,
       );
     } catch (e) {
-      
       Fluttertoast.showToast(
         msg: "เกิดข้อผิดพลาด: $e",
         backgroundColor: Colors.red,
@@ -76,7 +70,7 @@ class VendorController {
       await firestore.collection('vendors').doc(auth.currentUser!.uid).update({
         'storeHours': hours,
       });
-      Fluttertoast.showToast(msg: 'บันทึกเวลาร้านค้าสำเร็จ');
+      // Fluttertoast.showToast(msg: 'บันทึกเวลาร้านค้าสำเร็จ');
     } catch (e) {
       Fluttertoast.showToast(msg: 'เกิดข้อผิดพลาด: $e');
       rethrow;

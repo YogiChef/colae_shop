@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const {
     onDocumentWritten,
     onDocumentCreated,
@@ -921,6 +921,138 @@ exports.notifyAdminNewWithdrawal = onDocumentCreated({
     logger.error(`[WITHDRAWAL] log failed:`, err);
   }
 });
+
+// ─── BACKFILL FUNCTIONS ────────────────────────────────────────────────────────
+
+const RECALC_SECRET = 'colae-recalc-rating-2026';
+
+exports.recalculateVendorRatings = onRequest(
+  { region: 'asia-southeast1', timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    if (req.query.token !== RECALC_SECRET) {
+      return res.status(401).send('Unauthorized');
+    }
+
+    const db = admin.firestore();
+    const stats = { processed: 0, updated: 0, skipped: 0, errors: 0 };
+
+    try {
+      const vendorsSnap = await db.collection('vendors').get();
+      stats.total_vendors = vendorsSnap.size;
+
+      for (const vendorDoc of vendorsSnap.docs) {
+        stats.processed++;
+        const vendorId = vendorDoc.id;
+
+        try {
+          const reviewsSnap = await db
+            .collection('product_reviews')
+            .where('vendorId', '==', vendorId)
+            .get();
+
+          if (reviewsSnap.empty) {
+            stats.skipped++;
+            continue;
+          }
+
+          let totalAvg = 0;
+          let totalTaste = 0;
+          let totalCleanliness = 0;
+          let totalService = 0;
+          let totalSpeed = 0;
+          const count = reviewsSnap.size;
+
+          for (const reviewDoc of reviewsSnap.docs) {
+            const data = reviewDoc.data();
+            const ratings = data.ratings || {};
+            totalAvg += (data.average || 0);
+            totalTaste += (ratings.taste || 0);
+            totalCleanliness += (ratings.cleanliness || 0);
+            totalService += (ratings.service || 0);
+            totalSpeed += (ratings.speed || 0);
+          }
+
+          await vendorDoc.ref.set({
+            averageRating: parseFloat((totalAvg / count).toFixed(2)),
+            ratingCount: count,
+            tasteAvg: parseFloat((totalTaste / count).toFixed(2)),
+            cleanlinessAvg: parseFloat((totalCleanliness / count).toFixed(2)),
+            serviceAvg: parseFloat((totalService / count).toFixed(2)),
+            speedAvg: parseFloat((totalSpeed / count).toFixed(2)),
+            _ratingsRecalculatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          stats.updated++;
+          logger.info(`[RECALC-VENDOR] ✅ ${vendorId} count=${count} avg=${(totalAvg / count).toFixed(2)}`);
+
+        } catch (e) {
+          logger.error(`[RECALC-VENDOR] ❌ vendor ${vendorId}:`, e);
+          stats.errors++;
+        }
+      }
+
+      return res.status(200).json({ success: true, message: 'Recalculation complete', stats });
+
+    } catch (e) {
+      logger.error('[RECALC-VENDOR] Fatal error:', e);
+      return res.status(500).json({ success: false, error: e.message, stats });
+    }
+  }
+);
+
+exports.recalculateProductRatings = onRequest(
+  { region: 'asia-southeast1', timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    if (req.query.token !== RECALC_SECRET) {
+      return res.status(401).send('Unauthorized');
+    }
+
+    const db = admin.firestore();
+    const stats = { processed: 0, updated: 0, skipped: 0, errors: 0 };
+
+    try {
+      const reviewsSnap = await db.collection('product_reviews').get();
+      const byProduct = {};
+
+      for (const reviewDoc of reviewsSnap.docs) {
+        const data = reviewDoc.data();
+        const proId = data.proId;
+        if (!proId) continue;
+        if (!byProduct[proId]) byProduct[proId] = [];
+        byProduct[proId].push(data);
+      }
+
+      stats.total_products_with_reviews = Object.keys(byProduct).length;
+
+      for (const [proId, reviews] of Object.entries(byProduct)) {
+        stats.processed++;
+        try {
+          let totalAvg = 0;
+          for (const r of reviews) {
+            totalAvg += (r.average || 0);
+          }
+
+          await db.collection('products').doc(proId).set({
+            averageRating: parseFloat((totalAvg / reviews.length).toFixed(2)),
+            ratingCount: reviews.length,
+            _ratingsRecalculatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          stats.updated++;
+        } catch (e) {
+          logger.error(`[RECALC-PRODUCT] ❌ product ${proId}:`, e);
+          stats.errors++;
+        }
+      }
+
+      return res.status(200).json({ success: true, stats });
+
+    } catch (e) {
+      logger.error('[RECALC-PRODUCT] Fatal error:', e);
+      return res.status(500).json({ success: false, error: e.message, stats });
+    }
+  }
+);
 
 exports.onWithdrawalCompleted = onDocumentUpdated({
   document: 'withdrawal_requests/{requestId}',

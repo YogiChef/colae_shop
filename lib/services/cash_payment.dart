@@ -147,10 +147,16 @@ class CashPaymentHelper {
       final orderRef = firestore.collection('orders').doc(orderId);
       final batch = firestore.batch();
 
+      final List<DocumentSnapshot> prodSnaps = await Future.wait(
+        prodRefs.map((ref) => ref.get()),
+      );
       for (int i = 0; i < prodRefs.length; i++) {
-        batch.update(prodRefs[i], {
-          'pqty': FieldValue.increment(-quantities[i]),
-        });
+        final trackStock = (prodSnaps[i].data() as Map<String, dynamic>?)?['trackStock'] as bool? ?? true;
+        if (trackStock) {
+          batch.update(prodRefs[i], {
+            'pqty': FieldValue.increment(-quantities[i]),
+          });
+        }
       }
 
       batch.update(orderRef, {

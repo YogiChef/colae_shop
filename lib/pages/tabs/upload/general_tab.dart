@@ -572,7 +572,7 @@ class _GeneralTabState extends State<GeneralTab> {
                             key: ValueKey(groupIndex),
                             title: Text(groupName),
                             subtitle: Text(
-                              'ประเภท: $groupType • ${options.length} ตัวเลือก',
+                              'ประเภท: $groupType / ${options.length} ตัวเลือก',
                             ),
                             leading: Icon(
                               _getGroupIcon(groupType),

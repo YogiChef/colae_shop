@@ -2,6 +2,7 @@
 
 // ignore_for_file: unnecessary_cast
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colae_shop/auth/landing_page.dart';
 import 'package:colae_shop/pages/hotel/hotel_main_page.dart';
@@ -209,7 +210,7 @@ class _EarningPageState extends State<EarningPage> {
                     CircleAvatar(
                       radius: 20.sp,
                       backgroundImage: data['image'] != null
-                          ? NetworkImage(data['image'])
+                          ? CachedNetworkImageProvider(data['image'])
                           : null,
                       child: data['image'] == null
                           ? const Icon(Icons.store)
@@ -239,7 +240,7 @@ class _EarningPageState extends State<EarningPage> {
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: Image.asset(
-                        'images/pin.png',
+                        'images/map.webp',
                         width: 40.w,
                         height: 40.h,
                       ),
@@ -281,14 +282,16 @@ class _EarningPageState extends State<EarningPage> {
 
               return SingleChildScrollView(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    vertical: 20.h,
-                    horizontal: 20.w,
+                  padding: EdgeInsets.only(
+                    top: 12.h,
+                    left: 20.w,
+                    right: 20.w,
+                    bottom: 12.h,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.max,
                     children: [
-                      SizedBox(height: 16.h),
+                      SizedBox(height: 12.h),
                       SizedBox(
                         width: screenWidth * 0.90,
                         child: _infoTable(
@@ -311,7 +314,7 @@ class _EarningPageState extends State<EarningPage> {
                           ],
                         ),
                       ),
-                      SizedBox(height: 16.h),
+                      SizedBox(height: 12.h),
                       StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('hotel_bookings')
@@ -324,47 +327,78 @@ class _EarningPageState extends State<EarningPage> {
                         builder: (context, snap) {
                           final count = snap.data?.docs.length ?? 0;
                           return ModeCard(
-                            icon: Icons.hotel,
+                            image: Image.asset(
+                              'images/hotel.webp',
+                              width: 90.w,
+                              height: 90.w,
+                              fit: BoxFit.contain,
+                            ),
                             color: Colors.blue,
                             title: 'ที่พัก',
                             subtitle: 'โรงแรม รีสอร์ท โฮมสเตย์',
                             enabled: true,
-                            badgeCount: count, // ← เพิ่ม
+                            badgeCount: count,
                             onTap: () => _selectMode('hotel'),
                           );
                         },
                       ),
-                      SizedBox(height: 16.h),
+                      SizedBox(height: 12.h),
                       Card(
+                        margin: EdgeInsets.zero,
                         color: Colors.indigo,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(7.r),
                         ),
                         elevation: 4,
-
-                        child: SizedBox(
-                          height: 140.h,
-                          child: Center(
-                            child: ListTile(
-                              leading: const Icon(
-                                Icons.card_giftcard,
-                                color: Colors.orange,
-                              ),
-                              title: Text(
-                                'แนะนำเพื่อน',
-                                style: styles(
-                                  fontSize: 18.sp,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                        child: InkWell(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ReferralDashboardPage(),
+                            ),
+                          ),
+                          child: Container(
+                            padding: EdgeInsets.all(12),
+                            width: screenWidth * 0.9,
+                            height: 160.h,
+                            child: Row(
+                              children: [
+                                Container(
+                                  height: 80,
+                                  padding: EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                  ),
+                                  child: Image.asset(
+                                    'images/mlm.webp',
+                                    width: 80.w,
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
-                              ),
-
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ReferralDashboardPage(),
+                                SizedBox(width: 12.w),
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'บริหารธุรกิจ',
+                                      style: styles(
+                                        fontSize: 18.sp,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    Text(
+                                      'รายได้ Referral',
+                                      style: styles(
+                                        fontSize: 12.sp,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
+                              ],
                             ),
                           ),
                         ),
@@ -383,7 +417,7 @@ class _EarningPageState extends State<EarningPage> {
           final unreadCount = snapshot.data ?? 0;
           return FloatingActionButton(
             heroTag: 'earning_fab_chat',
-            backgroundColor: mainColor,
+            backgroundColor: Colors.blue[700],
             onPressed: () {
               Navigator.push(
                 context,

@@ -458,9 +458,12 @@ class _PreparInfoWidgetState extends State<PreparInfoWidget>
             .doc(proId);
         final prodSnap = await tx.get(prodRef);
         if (prodSnap.exists) {
-          final pqty = (prodSnap.data()?['pqty'] as num? ?? 0).toInt();
-          if (pqty < iQty) throw Exception('Insufficient stock');
-          tx.update(prodRef, {'pqty': pqty - iQty});
+          final trackStock = prodSnap.data()?['trackStock'] as bool? ?? true;
+          if (trackStock) {
+            final pqty = (prodSnap.data()?['pqty'] as num? ?? 0).toInt();
+            if (pqty < iQty) throw Exception('Insufficient stock');
+            tx.update(prodRef, {'pqty': pqty - iQty});
+          }
         }
       }
 

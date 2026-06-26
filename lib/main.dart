@@ -20,6 +20,7 @@ import 'package:thai_address_picker/thai_address_picker.dart'
     hide ChangeNotifierProvider;
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:colae_shop/auth/login_page.dart';
+import 'package:colae_shop/pages/terms_page.dart';
 import 'package:colae_shop/providers/product_provider.dart';
 import 'package:colae_shop/providers/vendor_order_provider.dart';
 import 'package:colae_shop/services/notification_service.dart';
@@ -257,6 +258,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           themeMode: ThemeMode.system,
           home: SplashView(),
+          getPages: [
+            GetPage(name: '/landing', page: () => const LandingPage()),
+            GetPage(name: '/login', page: () => const LoginPage()),
+            GetPage(name: '/terms', page: () => const TermsPage()),
+          ],
           builder: EasyLoading.init(),
         );
       },

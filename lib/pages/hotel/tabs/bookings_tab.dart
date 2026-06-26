@@ -1,5 +1,8 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colae_shop/auth/landing_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,12 +30,19 @@ class _BookingsTabState extends State<BookingsTab> {
   Map<String, List<QueryDocumentSnapshot>> _bookingsByDate = {};
   Map<String, int> _roomTotals = {};
   int _totalRoomsAll = 0;
+  StreamSubscription<QuerySnapshot>? _bookingsSub;
 
   @override
   void initState() {
     super.initState();
     _loadRoomTotals();
-    _loadBookings();
+    _subscribeBookings();
+  }
+
+  @override
+  void dispose() {
+    _bookingsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadRoomTotals() async {
@@ -56,28 +66,43 @@ class _BookingsTabState extends State<BookingsTab> {
     }
   }
 
-  Future<void> _loadBookings() async {
-    final snap = await FirebaseFirestore.instance
+  void _subscribeBookings() {
+    _bookingsSub?.cancel();
+    _bookingsSub = FirebaseFirestore.instance
         .collection('hotel_bookings')
         .where('hotelId', isEqualTo: _uid)
         .where('status', whereIn: ['pending', 'confirmed', 'checked_in'])
-        .get();
+        .snapshots()
+        .listen(
+          (snap) {
+            final m = <String, List<QueryDocumentSnapshot>>{};
+            for (final doc in snap.docs) {
+              final d = doc.data();
+              final checkIn = (d['checkIn'] as Timestamp).toDate();
+              final checkOut = (d['checkOut'] as Timestamp).toDate();
 
-    final m = <String, List<QueryDocumentSnapshot>>{};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final checkIn = (d['checkIn'] as Timestamp).toDate();
-      final checkOut = (d['checkOut'] as Timestamp).toDate();
-
-      DateTime cursor = DateTime(checkIn.year, checkIn.month, checkIn.day);
-      final endDate = DateTime(checkOut.year, checkOut.month, checkOut.day);
-      while (cursor.isBefore(endDate)) {
-        final key = DateFormat('yyyy-MM-dd').format(cursor);
-        m.putIfAbsent(key, () => []).add(doc);
-        cursor = cursor.add(const Duration(days: 1));
-      }
-    }
-    if (mounted) setState(() => _bookingsByDate = m);
+              DateTime cursor = DateTime(
+                checkIn.year,
+                checkIn.month,
+                checkIn.day,
+              );
+              final endDate = DateTime(
+                checkOut.year,
+                checkOut.month,
+                checkOut.day,
+              );
+              while (cursor.isBefore(endDate)) {
+                final key = DateFormat('yyyy-MM-dd').format(cursor);
+                m.putIfAbsent(key, () => []).add(doc);
+                cursor = cursor.add(const Duration(days: 1));
+              }
+            }
+            if (mounted) setState(() => _bookingsByDate = m);
+          },
+          onError: (e) {
+            debugPrint('Bookings stream error: $e');
+          },
+        );
   }
 
   int _roomsBookedOnDate(DateTime day) {
@@ -110,9 +135,7 @@ class _BookingsTabState extends State<BookingsTab> {
         day: day,
         bookings: _bookingsByDate[DateFormat('yyyy-MM-dd').format(day)] ?? [],
         roomTotals: _roomTotals,
-        onUpdated: () {
-          _loadBookings();
-        },
+        onUpdated: () {},
       ),
     );
   }
@@ -150,7 +173,6 @@ class _BookingsTabState extends State<BookingsTab> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               _loadRoomTotals();
-              _loadBookings();
             },
           ),
         ],
@@ -192,7 +214,7 @@ class _BookingsTabState extends State<BookingsTab> {
                 formatButtonVisible: false,
                 titleCentered: true,
                 titleTextStyle: styles(
-                  fontSize: 14.sp,
+                  fontSize: 13.sp,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -219,11 +241,11 @@ class _BookingsTabState extends State<BookingsTab> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('${day.day}', style: TextStyle(fontSize: 12.sp)),
+                        Text('${day.day}', style: styles(fontSize: 12.sp)),
                         if (booked > 0)
                           Text(
                             '$booked',
-                            style: TextStyle(
+                            style: styles(
                               fontSize: 9.sp,
                               color: Colors.red[800],
                               fontWeight: FontWeight.bold,
@@ -237,7 +259,7 @@ class _BookingsTabState extends State<BookingsTab> {
                   final color = _dayColor(day);
                   final booked = _roomsBookedOnDate(day);
                   return Container(
-                    margin: EdgeInsets.zero,
+                    margin: EdgeInsets.only(top: 12.h),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: color == Colors.white
@@ -292,7 +314,7 @@ class _BookingsTabState extends State<BookingsTab> {
                           '${day.day}',
                           style: TextStyle(
                             fontSize: 13.sp,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: mainColor,
                           ),
                         ),
@@ -302,7 +324,7 @@ class _BookingsTabState extends State<BookingsTab> {
                             style: TextStyle(
                               fontSize: 9.sp,
                               color: Colors.red[800],
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                       ],
@@ -451,7 +473,7 @@ class _BookingsTabState extends State<BookingsTab> {
         ),
         subtitle: Text(
           '${d['roomName'] ?? '-'} × ${d['rooms'] ?? 1}\n'
-          '${_statusLabel(status)} • '
+          '${_statusLabel(status)} / '
           '฿${(d['totalPrice'] as num?)?.toStringAsFixed(0) ?? '0'}',
           style: styles(fontSize: 12.sp),
         ),
@@ -473,7 +495,6 @@ class _BookingsTabState extends State<BookingsTab> {
         bookingDoc: doc,
         onUpdated: () {
           Navigator.pop(ctx);
-          _loadBookings();
         },
       ),
     );
@@ -598,7 +619,7 @@ class _DayDetailsSheet extends StatelessWidget {
                           child: ListTile(
                             title: Text(d['guestName'] ?? '-'),
                             subtitle: Text(
-                              '${d['roomName'] ?? '-'} • ฿${(d['totalPrice'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                              '${d['roomName'] ?? '-'} / ฿${(d['totalPrice'] as num?)?.toStringAsFixed(0) ?? '0'}',
                             ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () {
@@ -649,8 +670,22 @@ class _BookingDetailSheet extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('ยืนยัน$label'),
-        content: Text('คุณต้องการ$label การจองนี้ใช่หรือไม่?'),
+        title: Text(
+          'ยืนยัน$label',
+          style: styles(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+            color: Colors.purple[900],
+          ),
+        ),
+        content: Text(
+          'คุณต้องการ$label การจองนี้ใช่หรือไม่?',
+          style: styles(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            color: Colors.black54,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -664,12 +699,49 @@ class _BookingDetailSheet extends StatelessWidget {
         ],
       ),
     );
-    if (confirm == true) {
+    if (confirm != true) return;
+
+    try {
       await bookingDoc.reference.update({
         'status': newStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      if (newStatus == 'completed') {
+        await _deleteHotelChat(bookingDoc.id);
+      }
+
       onUpdated();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ผิดพลาด: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteHotelChat(String bookingId) async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final chatSnap = await db
+          .collection('chats')
+          .where('proId', isEqualTo: 'hotel_$bookingId')
+          .get();
+
+      if (chatSnap.docs.isEmpty) return;
+
+      final batch = db.batch();
+      for (final doc in chatSnap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      await db.collection('hotel_bookings').doc(bookingId).update({
+        'chatDeleted': true,
+      });
+    } catch (e) {
+      debugPrint('Failed to delete hotel chat: $e');
     }
   }
 
@@ -796,6 +868,7 @@ class _BookingDetailSheet extends StatelessWidget {
               rows: [
                 MapEntry('ผู้จอง', d['guestName'] ?? '-'),
                 MapEntry('เบอร์โทร', d['guestPhone'] ?? '-'),
+
                 if ((d['bookingCode'] ?? '').toString().isNotEmpty)
                   MapEntry('รหัสจอง', d['bookingCode'] ?? '-'),
               ],
@@ -853,6 +926,10 @@ class _BookingDetailSheet extends StatelessWidget {
               d['cancelRequested'] as bool? ?? false,
               d['cancelReason'] as String? ?? '',
               d['depositPaid'] as bool? ?? false,
+              d['fullyPaid'] as bool? ?? false,
+              d['pendingCashPayment'] as bool? ?? false,
+              (d['fullPaymentSlipUrl'] ?? '').toString(),
+              (d['depositSlipUrl'] ?? '').toString(),
             ),
             SizedBox(height: 20.h),
           ],
@@ -923,8 +1000,126 @@ class _BookingDetailSheet extends StatelessWidget {
     bool cancelRequested,
     String cancelReason,
     bool depositPaid,
+    bool fullyPaid,
+    bool pendingCash,
+    String fullPaymentSlipUrl,
+    String depositSlipUrl,
   ) {
     final buttons = <Widget>[];
+    final double remaining = totalPrice - depositAmount;
+
+    if (status == 'checked_in' && !fullyPaid) {
+      if (pendingCash) {
+        buttons.add(
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(12.w),
+            margin: EdgeInsets.only(bottom: 12.h),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border.all(color: Colors.green.shade400),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.payments, color: Colors.green[800], size: 18.sp),
+                SizedBox(width: 8.w),
+                Text(
+                  'ลูกค้าแจ้งจ่ายเงินสด ฿${remaining.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[900],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        buttons.add(
+          Padding(
+            padding: EdgeInsets.only(bottom: 8.h),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.payments, color: Colors.white),
+                label: Text(
+                  'รับเงินสด ฿${remaining.toStringAsFixed(0)}',
+                  style: styles(
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                ),
+                onPressed: () => _showCashReceiveDialog(context, remaining),
+              ),
+            ),
+          ),
+        );
+      } else if (fullPaymentSlipUrl.isNotEmpty) {
+        buttons.add(
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(12.w),
+            margin: EdgeInsets.only(bottom: 12.h),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border.all(color: Colors.blue.shade400),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long, color: Colors.blue[800], size: 18.sp),
+                SizedBox(width: 8.w),
+                Text(
+                  'ลูกค้าอัปสลิปแล้ว',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[900],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        buttons.add(
+          Padding(
+            padding: EdgeInsets.only(bottom: 8.h),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.image, color: Colors.white),
+                label: Text(
+                  'ดูสลิปและยืนยัน',
+                  style: styles(
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                ),
+                onPressed: () =>
+                    _showSlipConfirmDialog(context, fullPaymentSlipUrl),
+              ),
+            ),
+          ),
+        );
+      }
+    }
     if (cancelRequested && status != 'cancelled' && status != 'completed') {
       buttons.add(
         Container(
@@ -1034,18 +1229,49 @@ class _BookingDetailSheet extends StatelessWidget {
     }
 
     if (status == 'pending') {
-      buttons.add(
-        _actionButton(
-          context,
-          'ยืนยันการจอง',
-          Colors.green,
-          'confirmed',
-          'ยืนยันการจอง',
-        ),
-      );
-      buttons.add(
-        _actionButton(context, 'ปฏิเสธ', Colors.red, 'cancelled', 'ปฏิเสธ'),
-      );
+      if (depositSlipUrl.isNotEmpty) {
+        buttons.add(
+          Padding(
+            padding: EdgeInsets.only(bottom: 8.h),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.image, color: Colors.white),
+                label: Text(
+                  'ดูสลิปมัดจำ',
+                  style: styles(
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  padding: EdgeInsets.symmetric(vertical: 14.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                ),
+                onPressed: () =>
+                    _showDepositSlipDialog(context, depositSlipUrl),
+              ),
+            ),
+          ),
+        );
+      } else {
+        buttons.add(
+          _actionButton(
+            context,
+            'ยืนยันการจอง',
+            Colors.green,
+            'confirmed',
+            'ยืนยันการจอง',
+          ),
+        );
+        buttons.add(
+          _actionButton(context, 'ปฏิเสธ', Colors.red, 'cancelled', 'ปฏิเสธ'),
+        );
+      }
     } else if (status == 'confirmed') {
       buttons.add(
         _actionButton(
@@ -1105,6 +1331,403 @@ class _BookingDetailSheet extends StatelessWidget {
     }
   }
 
+  Future<void> _showCashReceiveDialog(
+    BuildContext context,
+    double remaining,
+  ) async {
+    final receivedCtl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          final double received = double.tryParse(receivedCtl.text.trim()) ?? 0;
+          final double change = received - remaining;
+          final bool valid = received >= remaining;
+
+          return AlertDialog(
+            title: const Text('รับเงินสด'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12.w),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('ยอดที่ต้องชำระ:', style: styles(fontSize: 13.sp)),
+                      Text(
+                        '฿${remaining.toStringAsFixed(2)}',
+                        style: styles(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                TextField(
+                  controller: receivedCtl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged: (_) => setSt(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'จำนวนเงินที่รับ',
+                    prefixText: '฿ ',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                if (received > 0) ...[
+                  Container(
+                    padding: EdgeInsets.all(12.w),
+                    decoration: BoxDecoration(
+                      color: valid ? Colors.green.shade50 : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(
+                        color: valid ? Colors.green : Colors.red,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          valid ? 'เงินทอน:' : 'ขาดอีก:',
+                          style: styles(fontSize: 13.sp),
+                        ),
+                        Text(
+                          valid
+                              ? '฿${change.toStringAsFixed(2)}'
+                              : '฿${(remaining - received).toStringAsFixed(2)}',
+                          style: styles(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.bold,
+                            color: valid ? Colors.green[800] : Colors.red[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (received > 0 && !valid) ...[
+                  SizedBox(height: 8.h),
+                  Text(
+                    '⚠️ จำนวนเงินน้อยกว่ายอดชำระ',
+                    style: TextStyle(fontSize: 12.sp, color: Colors.red[800]),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('ยกเลิก'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: valid ? Colors.green : Colors.grey,
+                ),
+                onPressed: valid
+                    ? () async {
+                        Navigator.pop(ctx);
+                        await _saveFullPaymentCash(received, change);
+                      }
+                    : null,
+                child: const Text(
+                  'ยืนยันรับเงิน',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _saveFullPaymentCash(double received, double change) async {
+    EasyLoading.show(status: 'กำลังบันทึก...');
+    try {
+      await bookingDoc.reference.update({
+        'fullyPaid': true,
+        'pendingCashPayment': false,
+        'cashReceived': received,
+        'cashChange': change,
+        'fullyPaidAt': FieldValue.serverTimestamp(),
+        'fullyPaidConfirmedBy': 'vendor',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      EasyLoading.showSuccess('บันทึกแล้ว');
+      onUpdated();
+    } catch (e) {
+      EasyLoading.showError('ผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _showDepositSlipDialog(
+    BuildContext context,
+    String slipUrl,
+  ) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog.fullscreen(
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(
+              'สลิปการชำระมัดจำ',
+              style: styles(
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w600,
+                color: Colors.purple[900],
+              ),
+            ),
+            leading: IconButton(
+              icon: Icon(Icons.close, size: 20.sp),
+              onPressed: () => Navigator.pop(ctx, 'close'),
+            ),
+          ),
+          body: Center(
+            child: SizedBox(
+              width: double.infinity,
+              height: double.infinity,
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                boundaryMargin: EdgeInsets.zero,
+                child: CachedNetworkImage(
+                  imageUrl: slipUrl,
+                  fit: BoxFit.contain,
+                  memCacheWidth: 1200,
+                  placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                  errorWidget: (ctx, __, ___) => Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.broken_image, size: 80.sp, color: Colors.grey),
+                      SizedBox(height: 8.h),
+                      Text(
+                        'โหลดรูปไม่ได้',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            child: Container(
+              padding: EdgeInsets.all(6.w),
+              color: Colors.black,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(vertical: 6.h),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, 'reject'),
+                      child: Text(
+                        'ปฏิเสธ',
+                        style: styles(
+                          color: Colors.deepOrange,
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: EdgeInsets.symmetric(vertical: 6.h),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, 'confirm'),
+                      child: Text(
+                        'ยืนยัน',
+                        style: styles(
+                          color: Colors.white,
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (result == null || result == 'close') return;
+
+    final newStatus = result == 'confirm' ? 'confirmed' : 'cancelled';
+
+    EasyLoading.show(status: 'กำลังบันทึก...');
+    try {
+      await bookingDoc.reference.update({
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      EasyLoading.showSuccess(
+        result == 'confirm' ? 'ยืนยันการจองแล้ว' : 'ปฏิเสธแล้ว',
+      );
+      onUpdated();
+    } catch (e) {
+      EasyLoading.showError('ผิดพลาด: $e');
+    }
+  }
+
+  Future<void> _showSlipConfirmDialog(
+    BuildContext context,
+    String slipUrl,
+  ) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: Text(
+              'สลิปจ่ายส่วนที่เหลือ',
+              style: styles(
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w600,
+                color: Colors.purple[900],
+              ),
+            ),
+            leading: IconButton(
+              icon: Icon(Icons.close, size: 20.sp),
+              onPressed: () => Navigator.pop(ctx, 'close'),
+            ),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4,
+              child: CachedNetworkImage(
+                imageUrl: slipUrl,
+                fit: BoxFit.contain,
+                memCacheWidth: 1200,
+                placeholder: (_, __) => const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                errorWidget: (ctx, __, ___) => Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.broken_image, size: 80.sp, color: Colors.grey),
+                    SizedBox(height: 8.h),
+                    Text(
+                      'โหลดรูปไม่ได้',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            child: Container(
+              padding: EdgeInsets.all(6.w),
+              color: Colors.black,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(vertical: 6.h),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, 'reject'),
+                      child: Text(
+                        'ปฏิเสธ',
+                        style: styles(
+                          color: Colors.red,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: EdgeInsets.symmetric(vertical: 6.h),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, 'confirm'),
+                      child: Text(
+                        'ยืนยันรับเงิน',
+                        style: styles(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (result == null || result == 'close') return;
+
+    if (result == 'confirm') {
+      EasyLoading.show(status: 'กำลังบันทึก...');
+      try {
+        await bookingDoc.reference.update({
+          'fullyPaid': true,
+          'fullyPaidAt': FieldValue.serverTimestamp(),
+          'fullyPaidConfirmedBy': 'vendor',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        EasyLoading.showSuccess('ยืนยันแล้ว');
+        onUpdated();
+      } catch (e) {
+        EasyLoading.showError('ผิดพลาด: $e');
+      }
+    } else if (result == 'reject') {
+      EasyLoading.show(status: 'กำลังบันทึก...');
+      try {
+        await bookingDoc.reference.update({
+          'fullPaymentSlipUrl': FieldValue.delete(),
+          'fullPaymentRejectedAt': FieldValue.serverTimestamp(),
+          'fullPaymentRejectedReason': 'สลิปไม่ถูกต้อง',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        EasyLoading.showSuccess('ปฏิเสธสลิป — ลูกค้าต้องอัปใหม่');
+        onUpdated();
+      } catch (e) {
+        EasyLoading.showError('ผิดพลาด: $e');
+      }
+    }
+  }
+
   Widget _actionButton(
     BuildContext context,
     String label,
@@ -1119,7 +1742,7 @@ class _BookingDetailSheet extends StatelessWidget {
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
-            padding: EdgeInsets.symmetric(vertical: 12.h),
+            padding: EdgeInsets.symmetric(vertical: 6.h),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10.r),
             ),

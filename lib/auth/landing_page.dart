@@ -1,12 +1,14 @@
 // ignore_for_file: avoid_print, empty_catches
 
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:colae_shop/models/vendor_model.dart';
 import 'package:colae_shop/pages/main_vendor_page.dart';
+import 'package:colae_shop/pages/terms_page.dart';
 import 'package:colae_shop/auth/vendor_auth.dart';
 import 'package:colae_shop/pages/tabs/settings/store_settings_page.dart';
 import 'package:colae_shop/services/sevice.dart';
@@ -120,6 +122,13 @@ class _LandingPageState extends State<LandingPage>
                   );
                 }
                 _cancelTimers();
+                final rawData =
+                    vendorSnapshot.data!.data() as Map<String, dynamic>;
+                final acceptedVer =
+                    rawData['termsAcceptedVersion'] as String?;
+                if (acceptedVer != CURRENT_TERMS_VERSION) {
+                  return const TermsPage();
+                }
                 return const MainVendorPage();
               } else {
                 _cancelTimers();
@@ -148,15 +157,16 @@ class _LandingPageState extends State<LandingPage>
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(5),
-            child: Image.network(
-              vendorsModel.image.isNotEmpty
+            child: CachedNetworkImage(
+              imageUrl: vendorsModel.image.isNotEmpty
                   ? vendorsModel.image
                   : 'https://via.placeholder.com/90',
               width: 90,
               height: 90,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.error, size: 90),
+              memCacheWidth: 200,
+              placeholder: (_, __) => Container(color: Colors.grey.shade200),
+              errorWidget: (_, __, ___) => const Icon(Icons.error, size: 90),
             ),
           ),
           const SizedBox(height: 15),

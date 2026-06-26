@@ -40,16 +40,14 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7.r)),
         title: Text(
-          'เลือกประเภท QR Code',
+          'ประเภท Qr Code',
           textAlign: TextAlign.center,
           style: styles(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
+            fontSize: 15.sp,
+            fontWeight: FontWeight.w600,
+            color: context.isDark ? Colors.white : Colors.black87,
           ),
         ),
         content: Column(
@@ -71,7 +69,7 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
             _ModeCard(
               icon: Icons.storefront,
               iconColor: Colors.green,
-              title: 'หน้าร้าน (ไม่มีโต๊ะ)',
+              title: 'หน้าร้าน',
               subtitle:
                   'ลูกค้าสแกนแล้วเห็นเมนูทันที\nเหมาะสำหรับ Takeaway / Counter',
               onTap: () {
@@ -99,15 +97,13 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7.r)),
         title: Text(
           'ระบุเลขโต๊ะ',
           style: styles(
-            fontSize: 16.sp,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
+            fontSize: 15.sp,
+            fontWeight: FontWeight.w600,
+            color: context.isDark ? Colors.white : Colors.black87,
           ),
         ),
         content: TextField(
@@ -116,9 +112,9 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
           keyboardType: TextInputType.text,
           textCapitalization: TextCapitalization.characters,
           decoration: InputDecoration(
-            labelText: 'เลขโต๊ะ (เช่น A1, B3, 5)',
+            labelText: 'เลขโต๊ะ ',
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10.r),
+              borderRadius: BorderRadius.circular(7.r),
             ),
             prefixIcon: const Icon(Icons.table_bar),
           ),
@@ -132,7 +128,12 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
             ),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(7),
+              ),
+            ),
             onPressed: () {
               final table = _tableController.text.trim();
               if (table.isEmpty) {
@@ -216,27 +217,34 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
     final isTable = _currentMode == _QrMode.table;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          'ร้าน: ${widget.restaurantName}',
-          style: styles(
-            fontSize: 18.sp,
-            fontWeight: FontWeight.w600,
-            color: mainColor,
-          ),
-        ),
-      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: 20.w),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(height: 40.h),
-
+              SizedBox(height: 12.h),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    icon: Icon(Icons.arrow_back, color: context.textColor),
+                  ),
+                  Text(
+                    'ร้าน: ${widget.restaurantName}',
+                    style: styles(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w600,
+                      color: context.isDark ? Colors.white : mainColor,
+                    ),
+                  ),
+                  SizedBox(),
+                ],
+              ),
+              SizedBox(height: _qrData != null ? 60 : 120),
               if (_qrData != null) ...[
                 Container(
                   margin: EdgeInsets.only(bottom: 16.h),
@@ -244,25 +252,18 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
                     horizontal: 24.w,
                     vertical: 5.h,
                   ),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: isTable
-                        ? Colors.amber.withValues(alpha: 0.12)
-                        : Colors.green.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20.r),
-                    border: Border.all(
-                      color: isTable
-                          ? Colors.amber.shade300
-                          : Colors.green.shade300,
-                    ),
-                  ),
+
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         isTable ? Icons.table_restaurant : Icons.storefront,
-                        size: 32.sp,
-                        color: isTable ? mainColor : Colors.indigo.shade700,
+                        size: 42.sp,
+                        color: context.isDark
+                            ? Colors.white
+                            : isTable
+                            ? mainColor
+                            : Colors.indigo.shade700,
                       ),
                       SizedBox(width: 12.w),
                       Text(
@@ -270,7 +271,11 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
                         style: styles(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
-                          color: isTable ? mainColor : Colors.indigo.shade700,
+                          color: context.isDark
+                              ? Colors.white
+                              : isTable
+                              ? mainColor
+                              : Colors.indigo.shade700,
                         ),
                       ),
                     ],
@@ -339,31 +344,37 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
                 SizedBox(height: 120.h),
               ] else ...[
                 // placeholder
-                Center(
-                  child: Container(
-                    height: 260.h,
-                    width: 240.h,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16.r),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.qr_code_2,
-                          size: 120.sp,
-                          color: Colors.black38,
-                        ),
-                        SizedBox(height: 10.h),
-                        Text(
-                          'กด "สร้าง QR Code"\nเพื่อเริ่มต้น',
-                          textAlign: TextAlign.center,
-                          style: styles(fontSize: 13.sp, color: Colors.black38),
-                        ),
-                      ],
+                InkWell(
+                  onTap: _showModeDialog,
+                  child: Center(
+                    child: Container(
+                      height: 310.h,
+                      width: width * 0.8,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10.r),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.qr_code_2,
+                            size: 170.sp,
+                            color: Colors.black38,
+                          ),
+                          SizedBox(height: 10.h),
+                          Text(
+                            'กด "สร้าง QR Code"\nเพื่อเริ่มต้น',
+                            textAlign: TextAlign.center,
+                            style: styles(
+                              fontSize: 13.sp,
+                              color: Colors.black38,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -375,46 +386,51 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
-          color: Colors.white,
-          height: 90.h,
+          height: 70.h,
           padding: EdgeInsets.only(
             left: 20.w,
             right: 20.w,
-            top: 12.h,
-            bottom: MediaQuery.of(context).viewPadding.bottom + 12.h,
+
+            bottom: MediaQuery.of(context).viewPadding.bottom + 20.h,
           ),
           child: _qrData != null
               ? Row(
                   children: [
                     Expanded(
-                      flex: 2,
                       child: OutlinedButton.icon(
                         onPressed: _showModeDialog,
                         icon: Icon(
                           Icons.refresh,
                           size: 24.sp,
-                          color: Colors.amber.shade700,
+                          color: context.isDark
+                              ? Colors.white
+                              : Colors.amber.shade700,
                         ),
                         label: Text(
                           'แก้ไข',
                           style: styles(
                             fontSize: 13.sp,
-                            color: Colors.amber.shade700,
+                            color: context.isDark
+                                ? Colors.white
+                                : Colors.amber.shade700,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.amber.shade700),
+                          side: BorderSide(
+                            color: context.isDark
+                                ? Colors.white
+                                : Colors.amber.shade700,
+                          ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10.r),
+                            borderRadius: BorderRadius.circular(7.r),
                           ),
                           padding: EdgeInsets.symmetric(vertical: 12.h),
                         ),
                       ),
                     ),
-                    SizedBox(width: 4.w),
+                    SizedBox(width: 12.w),
                     Expanded(
-                      flex: 2,
                       child: ElevatedButton.icon(
                         onPressed: _saveQRToGallery,
                         icon: Icon(
@@ -433,7 +449,7 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: mainColor,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10.r),
+                            borderRadius: BorderRadius.circular(7.r),
                           ),
                           padding: EdgeInsets.symmetric(vertical: 12.h),
                         ),
@@ -441,32 +457,7 @@ class _TableQRGeneratorPageState extends State<TableQRGeneratorPage> {
                     ),
                   ],
                 )
-              : SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _showModeDialog,
-                    icon: Icon(
-                      Icons.qr_code_2,
-                      color: Colors.white,
-                      size: 24.sp,
-                    ),
-                    label: Text(
-                      'สร้าง QR Code',
-                      style: styles(
-                        fontSize: 15.sp,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: mainColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10.r),
-                      ),
-                      padding: EdgeInsets.symmetric(vertical: 14.h),
-                    ),
-                  ),
-                ),
+              : SizedBox(),
         ),
       ),
     );
@@ -494,11 +485,11 @@ class _ModeCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12.r),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: BorderRadius.circular(7.r),
           border: Border.all(color: Colors.grey.shade200),
-          color: Colors.grey.shade50,
+          color: context.isDark ? Colors.white38 : Colors.grey.shade50,
         ),
         child: Row(
           children: [
@@ -511,7 +502,7 @@ class _ModeCard extends StatelessWidget {
               ),
               child: Icon(icon, color: iconColor, size: 22.sp),
             ),
-            SizedBox(width: 12.w),
+            SizedBox(width: 6.w),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -521,7 +512,7 @@ class _ModeCard extends StatelessWidget {
                     style: styles(
                       fontSize: 14.sp,
                       fontWeight: FontWeight.w700,
-                      color: Colors.black87,
+                      color: context.isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                   SizedBox(height: 2.h),
@@ -529,7 +520,9 @@ class _ModeCard extends StatelessWidget {
                     subtitle,
                     style: styles(
                       fontSize: 11.sp,
-                      color: Colors.grey.shade600,
+                      color: context.isDark
+                          ? Colors.white70
+                          : Colors.grey.shade600,
                       height: 1.4,
                     ),
                   ),
@@ -538,7 +531,7 @@ class _ModeCard extends StatelessWidget {
             ),
             Icon(
               Icons.arrow_forward_ios,
-              size: 14.sp,
+              size: 20.sp,
               color: Colors.grey.shade400,
             ),
           ],

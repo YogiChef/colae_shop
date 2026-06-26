@@ -1,5 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -35,7 +36,11 @@ class RoomsTab extends StatelessWidget {
           icon: const Icon(Icons.add, color: Colors.white),
           label: Text(
             'เพิ่มห้อง',
-            style: styles(color: Colors.white, fontSize: 16.sp, fontWeight: FontWeight.w500),
+            style: styles(
+              color: Colors.white,
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           onPressed: () {
             Navigator.push(
@@ -96,6 +101,7 @@ class RoomsTab extends StatelessWidget {
     final images = List<String>.from(d['images'] ?? []);
     return Card(
       margin: EdgeInsets.only(bottom: 12.h),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4.r)),
       child: Padding(
         padding: EdgeInsets.all(12.w),
         child: Column(
@@ -104,14 +110,20 @@ class RoomsTab extends StatelessWidget {
             Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(8.r),
+                  borderRadius: BorderRadius.circular(4.r),
                   child: images.isNotEmpty
-                      ? Image.network(
-                          images.first,
+                      ? CachedNetworkImage(
+                          imageUrl: images.first,
                           width: 80.w,
                           height: 80.w,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          memCacheWidth: 400,
+                          placeholder: (_, __) => Container(
+                            width: 80.w,
+                            height: 80.w,
+                            color: Colors.grey.shade200,
+                          ),
+                          errorWidget: (_, __, ___) => Container(
                             width: 80.w,
                             height: 80.w,
                             color: Colors.grey.shade200,
@@ -138,14 +150,18 @@ class RoomsTab extends StatelessWidget {
                           Text(
                             d['name'] ?? '-',
                             style: styles(
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.deepPurple[900],
                             ),
                           ),
                           Spacer(),
                           SizedBox(width: 8.w),
                           IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
+                            icon: const Icon(
+                              Icons.delete,
+                              color: Colors.orange,
+                            ),
                             onPressed: () async {
                               final confirm = await showDialog<bool>(
                                 context: context,
@@ -158,12 +174,18 @@ class RoomsTab extends StatelessWidget {
                                     TextButton(
                                       onPressed: () =>
                                           Navigator.pop(ctx, false),
-                                      child: const Text('ยกเลิก'),
+                                      child: Text(
+                                        'ยกเลิก',
+                                        style: styles(
+                                          fontSize: 13.sp,
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
                                     ),
                                     ElevatedButton(
                                       onPressed: () => Navigator.pop(ctx, true),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
+                                        backgroundColor: Colors.amber,
                                       ),
                                       child: const Text(
                                         'ลบ',
@@ -187,7 +209,7 @@ class RoomsTab extends StatelessWidget {
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        '${d['roomType'] ?? ''} • ${d['totalRooms'] ?? 0} ห้อง • พัก ${d['maxGuests'] ?? 0} คน',
+                        '${d['roomType'] ?? ''} / ${d['totalRooms'] ?? 0} ห้อง / พัก ${d['maxGuests'] ?? 0} คน',
                         style: styles(fontSize: 12.sp, color: Colors.grey[700]),
                       ),
                       SizedBox(height: 4.h),
@@ -195,8 +217,8 @@ class RoomsTab extends StatelessWidget {
                         '฿${(d['basePrice'] as num?)?.toStringAsFixed(0) ?? '0'} / คืน',
                         style: styles(
                           fontSize: 14.sp,
-                          color: mainColor,
-                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple[900],
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -204,12 +226,15 @@ class RoomsTab extends StatelessWidget {
                 ),
               ],
             ),
-            SizedBox(height: 8.h),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: Icon(Icons.edit, size: 16.sp, color: mainColor),
+                    icon: Icon(
+                      Icons.edit,
+                      size: 16.sp,
+                      color: Colors.deepOrange,
+                    ),
                     style: OutlinedButton.styleFrom(
                       side: BorderSide.none,
 
@@ -217,7 +242,11 @@ class RoomsTab extends StatelessWidget {
                     ),
                     label: Text(
                       'แก้ไข',
-                      style: styles(fontSize: 12.sp, color: Colors.deepOrange,fontWeight: FontWeight.w400),
+                      style: styles(
+                        fontSize: 12.sp,
+                        color: Colors.deepOrange,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                     onPressed: () {
                       Navigator.push(
@@ -244,7 +273,11 @@ class RoomsTab extends StatelessWidget {
                     ),
                     label: Text(
                       'ราคาพิเศษ',
-                      style: styles(fontSize: 12.sp, color: Colors.blue,fontWeight: FontWeight.w400),
+                      style: styles(
+                        fontSize: 12.sp,
+                        color: Colors.blue,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                     onPressed: () {
                       Navigator.push(

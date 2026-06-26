@@ -22,6 +22,14 @@ class ProductProvider with ChangeNotifier {
   Map<String, dynamic> productData = {};
   List<Map<String, dynamic>> optionGroups = [];
   String notes = '';
+  bool _trackStock = true;
+
+  bool get trackStock => _trackStock;
+
+  void setTrackStock(bool val) {
+    _trackStock = val;
+    notifyListeners();
+  }
 
   void getFormData({
     String? productName,
@@ -45,6 +53,7 @@ class ProductProvider with ChangeNotifier {
     int? packageQty,
     String? unit,
     double? unitSize,
+    String? shippingCarrier,
     bool notify = true,
   }) {
     if (productName != null) productData['productName'] = productName;
@@ -91,6 +100,7 @@ class ProductProvider with ChangeNotifier {
     if (packageQty != null) productData['packageQty'] = packageQty;
     if (unit != null) productData['unit'] = unit;
     if (unitSize != null) productData['unitSize'] = unitSize;
+    if (shippingCarrier != null) productData['shippingCarrier'] = shippingCarrier;
 
     if (notify) notifyListeners();
   }
@@ -145,6 +155,7 @@ class ProductProvider with ChangeNotifier {
     productData.clear();
     optionGroups.clear();
     notes = '';
+    _trackStock = true;
     notifyListeners();
   }
 
@@ -188,12 +199,14 @@ class ProductProvider with ChangeNotifier {
       packageQty: (data['packageQty'] as num?)?.toInt() ?? 1,
       unit: data['unit']?.toString() ?? '',
       unitSize: (data['unitSize'] as num?)?.toDouble() ?? 0.0,
+      shippingCarrier: data['shippingCarrier']?.toString() ?? '',
       notify: false,
     );
 
     final optionGroupsData = data['optionGroups'] as List<dynamic>? ?? [];
     loadOptionGroups(optionGroupsData);
 
+    _trackStock = data['trackStock'] as bool? ?? true;
     notifyListeners();
   }
 
@@ -209,7 +222,7 @@ class ProductProvider with ChangeNotifier {
 
     if (productName == null || productName.isEmpty) return false;
     if (productPrice == null || productPrice <= 0) return false;
-    if (qty == null || qty <= 0) return false;
+    if (_trackStock && (qty == null || qty <= 0)) return false;
     if (type == null || type.isEmpty) return false;
     if (description == null || description.isEmpty) return false;
     if ((chargeShipping ?? false) &&
@@ -246,7 +259,8 @@ class ProductProvider with ChangeNotifier {
         'proId': proId,
         'proName': productData['productName'],
         'price': productData['productPrice'],
-        'pqty': productData['qty'],
+        'pqty': _trackStock ? productData['qty'] : 0,
+        'trackStock': _trackStock,
         'type': productData['type'],
         'description': productData['description'],
         'date': productData['date'] ?? DateTime.now(),
@@ -275,6 +289,7 @@ class ProductProvider with ChangeNotifier {
         'packageQty': productData['packageQty'] ?? 1,
         'unit': productData['unit'] ?? '',
         'unitSize': productData['unitSize'] ?? 0.0,
+        'shippingCarrier': productData['shippingCarrier'] ?? '',
       });
 
       clearData();

@@ -22,9 +22,9 @@ class _HotelMainPageState extends State<HotelMainPage> {
 
   final List<Widget> _tabs = const [
     BookingsTab(),
-    HotelInfoTab(),
-    RoomsTab(),
     HotelEarningsTab(),
+    RoomsTab(),
+    HotelInfoTab(),
   ];
 
   Widget _bookingTabIcon() {
@@ -35,26 +35,16 @@ class _HotelMainPageState extends State<HotelMainPage> {
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('chats')
-          .where('vendorId', isEqualTo: uid)
-          .where('proId', isGreaterThanOrEqualTo: 'hotel_')
-          .where('proId', isLessThan: 'hotel_~')
+          .collection('hotel_bookings')
+          .where('hotelId', isEqualTo: uid)
+          .where('status', isEqualTo: 'pending')
           .snapshots(),
       builder: (context, snap) {
-        int unreadCount = 0;
-        if (snap.hasData) {
-          for (final doc in snap.data!.docs) {
-            final d = doc.data() as Map<String, dynamic>;
-            final read = d['read'] as bool? ?? true;
-            final senderId = d['senderId'] as String? ?? '';
-            if (!read && senderId != uid) unreadCount++;
-          }
-        }
-
+        final count = snap.data?.docs.length ?? 0;
         final baseIcon = Icon(
           _currentTab == 0 ? IconlyBold.home : IconlyLight.home,
         );
-        if (unreadCount == 0) return baseIcon;
+        if (count == 0) return baseIcon;
 
         return Stack(
           clipBehavior: Clip.none,
@@ -71,7 +61,7 @@ class _HotelMainPageState extends State<HotelMainPage> {
                 ),
                 constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 child: Text(
-                  unreadCount > 9 ? '9+' : '$unreadCount',
+                  count > 9 ? '9+' : '$count',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
@@ -98,14 +88,16 @@ class _HotelMainPageState extends State<HotelMainPage> {
           selectedItemColor: Colors.white,
           type: BottomNavigationBarType.fixed,
           unselectedItemColor: Colors.white70,
-          selectedIconTheme: IconThemeData(size: 16.spMax),
+          selectedIconTheme: IconThemeData(size: 26.spMax),
           selectedLabelStyle: GoogleFonts.righteous(fontSize: 14.spMax),
           onTap: (index) => setState(() => _currentTab = index),
           items: [
             BottomNavigationBarItem(icon: _bookingTabIcon(), label: 'การจอง'),
             BottomNavigationBarItem(
-              icon: Icon(_currentTab == 1 ? Icons.bed : Icons.bed_outlined),
-              label: 'ห้องพัก',
+              icon: Icon(
+                _currentTab == 1 ? IconlyBold.wallet : IconlyLight.wallet,
+              ),
+              label: 'รายได้',
             ),
             BottomNavigationBarItem(
               icon: Icon(
@@ -114,10 +106,8 @@ class _HotelMainPageState extends State<HotelMainPage> {
               label: 'ที่พัก',
             ),
             BottomNavigationBarItem(
-              icon: Icon(
-                _currentTab == 3 ? IconlyBold.wallet : IconlyLight.wallet,
-              ),
-              label: 'รายได้',
+              icon: Icon(_currentTab == 3 ? Icons.bed : Icons.bed_outlined),
+              label: 'ห้องพัก',
             ),
           ],
         ),

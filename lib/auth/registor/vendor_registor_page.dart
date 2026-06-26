@@ -280,8 +280,7 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
           'qrCodeImage': qrImageUrl,
         };
         await saveVendorData(vendorData);
-        final referralCode =
-            _referralCodeController.text.trim().toUpperCase();
+        final referralCode = _referralCodeController.text.trim().toUpperCase();
         if (referralCode.isNotEmpty) {
           try {
             final functions = FirebaseFunctions.instanceFor(
@@ -300,12 +299,10 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
             final functions = FirebaseFunctions.instanceFor(
               region: 'asia-southeast1',
             );
-            await functions
-                .httpsCallable('generateReferralCodeForUser')
-                .call({
-                  'userId': _auth.currentUser!.uid,
-                  'userType': 'vendor',
-                });
+            await functions.httpsCallable('generateReferralCodeForUser').call({
+              'userId': _auth.currentUser!.uid,
+              'userType': 'vendor',
+            });
           } catch (e) {
             debugPrint('[REFERRAL-GEN] error: $e');
           }
@@ -581,6 +578,32 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _referralCodeController,
+                      decoration: InputDecoration(
+                        labelText: 'รหัสแนะนำ (ถ้ามี)',
+                        prefixIcon: Icon(Icons.card_giftcard),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      textCapitalization: TextCapitalization.characters,
+                    ),
                     SizedBox(height: 12.h),
                     Text(
                       'ข้อมูลร้าน',
@@ -666,7 +689,6 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                                 : null,
                           ),
                         ),
-                        SizedBox(width: 10.w),
                         SizedBox(width: width * .4),
                       ],
                     ),
@@ -715,7 +737,33 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                     DropdownButtonFormField<String>(
                       padding: EdgeInsets.zero,
                       initialValue: _categoryDropdownValue,
-                      hint: const Text('เลือกหมวดหมู่'),
+                      hint: Text(
+                        'เลือกหมวดหมู่',
+                        style: styles(
+                          fontSize: 14.sp,
+                          color: context.textColor,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      decoration: InputDecoration(
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
                       items: _categoryList.map((String category) {
                         return DropdownMenuItem<String>(
                           value: category,
@@ -787,6 +835,25 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                       child: DropdownButtonFormField<String>(
                         initialValue: _bankDropdownValue,
                         hint: const Text('เลือกธนาคาร'),
+                        decoration: InputDecoration(
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
                         isExpanded: true,
                         items: _bankList.map((String bank) {
                           return DropdownMenuItem<String>(
@@ -926,9 +993,85 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                     SizedBox(height: 12.h),
 
                     ThaiAddressForm(
+                      provinceDecoration: InputDecoration(
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      districtDecoration: InputDecoration(
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      subDistrictDecoration: InputDecoration(
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      zipCodeDecoration: InputDecoration(
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
                       textStyle: styles(
                         fontSize: 14.sp,
-                        color: Colors.black87,
+                        color: context.textColor,
                         fontWeight: FontWeight.w500,
                       ),
 
@@ -947,23 +1090,25 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Tax Registered?',
-                          style: styles(
-                            color: Colors.cyan.shade600,
-                            fontSize: 16,
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            'จดทะเบียนบริษัท',
+                            style: styles(
+                              color: Colors.cyan.shade600,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 10),
                         Flexible(
                           child: SizedBox(
-                            width: 100,
+                            width: 90,
                             child: DropdownButtonFormField(
                               hint: Text(
                                 'Select',
                                 style: styles(
                                   color: Colors.cyan.shade600,
-                                  fontSize: 16,
+                                  fontSize: 14.sp,
                                 ),
                               ),
                               items: _taxOptions
@@ -986,7 +1131,7 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                     ),
                     if (_taxStatus == 'YES') ...[
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: EdgeInsets.symmetric(horizontal: 6.w),
                         child: TextFormField(
                           keyboardType: TextInputType.number,
                           onChanged: (value) =>
@@ -995,22 +1140,13 @@ class _VendorRegistorPageState extends State<VendorRegistorPage> {
                               ? 'Please Tax Number must not be empty'
                               : null,
                           decoration: InputDecoration(
-                            labelText: 'Tax Number',
+                            labelText: 'เลขประจำตัวผู้เสียภาษี',
                             labelStyle: styles(color: Colors.cyan.shade600),
                           ),
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _referralCodeController,
-                      decoration: const InputDecoration(
-                        labelText: 'รหัสแนะนำ (ถ้ามี)',
-                        prefixIcon: Icon(Icons.card_giftcard),
-                        border: OutlineInputBorder(),
-                      ),
-                      textCapitalization: TextCapitalization.characters,
-                    ),
+
                     const SizedBox(height: 70),
                   ],
                 ),

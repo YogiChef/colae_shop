@@ -2,6 +2,7 @@
 
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -39,9 +40,7 @@ class _GeneralUploadState extends State<GeneralUpload>
   List<File> _image = [];
   final List<String> _imageUrlList = [];
   final ImagePicker picker = ImagePicker();
-  bool? _chargeShipping = false;
   DateTime? _scheduleDate;
-  final TextEditingController _shippingController = TextEditingController();
   String _saleMode = 'delivery';
   List<Map<String, TextEditingController>> _tierControllers = [];
   final TextEditingController _extraBaseController = TextEditingController(
@@ -57,6 +56,44 @@ class _GeneralUploadState extends State<GeneralUpload>
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  final TextEditingController _promptpayNumberController =
+      TextEditingController();
+  final TextEditingController _promptpayNameController =
+      TextEditingController();
+
+  String _defaultCarrier = 'Kerry';
+  final TextEditingController _customCarrierController =
+      TextEditingController();
+  final List<String> _carriers = [
+    'Kerry',
+    'Flash',
+    'J&T',
+    'Thai Post',
+    'อื่นๆ',
+  ];
+  Future<void> _loadCarrier() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await _firestore.collection('vendors').doc(uid).get();
+    if (!doc.exists || !mounted) return;
+    final data = doc.data() ?? {};
+    final saved = data['defaultCarrier'] as String? ?? 'Kerry';
+    final pp = (data['promptpay'] as Map<String, dynamic>?) ?? {};
+    setState(() {
+      if (_carriers.contains(saved)) {
+        _defaultCarrier = saved;
+      } else {
+        _defaultCarrier = 'อื่นๆ';
+        _customCarrierController.text = saved;
+      }
+      _promptpayNumberController.text = pp['number'] as String? ?? '';
+      _promptpayNameController.text = pp['accountName'] as String? ?? '';
+    });
+  }
 
   // Package
   String _selectedPackage = 'ห่อ';
@@ -163,7 +200,14 @@ class _GeneralUploadState extends State<GeneralUpload>
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('เพิ่มกลุ่มตัวเลือก'),
+          title: Text(
+            'เพิ่มกลุ่มตัวเลือก',
+            style: styles(
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w500,
+              color: context.textColor,
+            ),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -198,7 +242,14 @@ class _GeneralUploadState extends State<GeneralUpload>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('ยกเลิก'),
+              child: Text(
+                'ยกเลิก',
+                style: styles(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: context.textColor,
+                ),
+              ),
             ),
             TextButton(
               onPressed: () {
@@ -222,7 +273,14 @@ class _GeneralUploadState extends State<GeneralUpload>
                   );
                 }
               },
-              child: const Text('เพิ่ม'),
+              child: Text(
+                'เพิ่ม',
+                style: styles(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: context.textColor,
+                ),
+              ),
             ),
           ],
         ),
@@ -250,8 +308,13 @@ class _GeneralUploadState extends State<GeneralUpload>
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'ชื่อตัวเลือก',
+                labelStyle: styles(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: context.textColor,
+                ),
                 border: OutlineInputBorder(),
               ),
             ),
@@ -262,6 +325,11 @@ class _GeneralUploadState extends State<GeneralUpload>
               readOnly: isFree,
               decoration: InputDecoration(
                 labelText: isFree ? 'ฟรี' : 'ราคาเพิ่ม',
+                labelStyle: styles(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w500,
+                  color: context.textColor,
+                ),
                 border: const OutlineInputBorder(),
                 suffixText: isFree ? '฿0' : '฿',
               ),
@@ -293,7 +361,14 @@ class _GeneralUploadState extends State<GeneralUpload>
                 );
               }
             },
-            child: const Text('เพิ่ม'),
+            child: Text(
+              'เพิ่ม',
+              style: styles(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+                color: context.textColor,
+              ),
+            ),
           ),
         ],
       ),
@@ -318,6 +393,9 @@ class _GeneralUploadState extends State<GeneralUpload>
     _packageQtyController.dispose();
     _customUnitController.dispose();
     _unitSizeController.dispose();
+    _customCarrierController.dispose();
+    _promptpayNumberController.dispose();
+    _promptpayNameController.dispose();
     super.dispose();
   }
 
@@ -325,8 +403,9 @@ class _GeneralUploadState extends State<GeneralUpload>
   void initState() {
     super.initState();
     _tierControllers = [];
-    _addTier(qtyFrom: 1, qtyTo: 9, fee: 0, rebuild: false);
+    _addTier(qtyFrom: 1, qtyTo: 5, fee: 0, rebuild: false);
     getType();
+    _loadCarrier();
   }
 
   Future<void> _openBarcodeScanner() async {
@@ -455,11 +534,13 @@ class _GeneralUploadState extends State<GeneralUpload>
                         return index == 0
                             ? Material(
                                 elevation: 0,
-                                color: Colors.white24,
+                                color: Colors.transparent,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(7.r),
                                   side: BorderSide(
-                                    color: Colors.grey.shade400,
+                                    color: context.isDark
+                                        ? Colors.white70
+                                        : Colors.grey.shade400,
                                     width: 1,
                                   ),
                                 ),
@@ -475,7 +556,9 @@ class _GeneralUploadState extends State<GeneralUpload>
                                           CupertinoIcons
                                               .photo_fill_on_rectangle_fill,
                                           size: 34.r,
-                                          color: Colors.grey,
+                                          color: context.isDark
+                                              ? mainColor
+                                              : Colors.grey,
                                         ),
                                       ),
                                       Text(
@@ -483,7 +566,9 @@ class _GeneralUploadState extends State<GeneralUpload>
                                         textAlign: TextAlign.center,
                                         style: GoogleFonts.righteous(
                                           fontSize: 14.sp,
-                                          color: Colors.grey,
+                                          color: context.isDark
+                                              ? mainColor
+                                              : Colors.grey,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -531,7 +616,9 @@ class _GeneralUploadState extends State<GeneralUpload>
                           decoration: BoxDecoration(
                             border: Border(
                               bottom: BorderSide(
-                                color: Colors.grey.shade400,
+                                color: context.isDark
+                                    ? Colors.white70
+                                    : Colors.grey.shade400,
                                 width: 1,
                               ),
                             ),
@@ -541,7 +628,7 @@ class _GeneralUploadState extends State<GeneralUpload>
                             children: [
                               Icon(
                                 Icons.qr_code_scanner,
-                                color: Colors.black54,
+                                color: context.textColor,
                                 size: 18.sp,
                               ),
                               SizedBox(width: 8.w),
@@ -549,8 +636,8 @@ class _GeneralUploadState extends State<GeneralUpload>
                                 _scannedBarcode != null
                                     ? '$_scannedBarcode '
                                     : 'สแกนบาร์โค้ด',
-                                style: TextStyle(
-                                  color: Colors.black54,
+                                style: styles(
+                                  color: context.textColor,
                                   fontSize: 13.sp,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -560,7 +647,7 @@ class _GeneralUploadState extends State<GeneralUpload>
                         ),
                       ),
                     ),
-
+                    SizedBox(height: 12.h),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: _selectedType,
@@ -593,15 +680,34 @@ class _GeneralUploadState extends State<GeneralUpload>
                         errorBorder: const UnderlineInputBorder(
                           borderSide: BorderSide(color: Colors.red, width: 2),
                         ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
                       ),
                       hint: Text(
                         'ประเภทสินค้า',
-                        style: styles(fontSize: 12.sp),
+                        style: styles(
+                          fontSize: 12.sp,
+                          color: context.textColor,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
                       items: _categoryList.map<DropdownMenuItem<String>>((e) {
                         return DropdownMenuItem(
                           value: e,
-                          child: Text(e, style: styles(fontSize: 12.sp)),
+                          child: Text(
+                            e,
+                            style: styles(
+                              fontSize: 12.sp,
+                              color: context.textColor,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
                         );
                       }).toList(),
                       onChanged: (value) {
@@ -616,6 +722,7 @@ class _GeneralUploadState extends State<GeneralUpload>
                     InputTextfield(
                       textInputType: TextInputType.text,
                       prefixIcon: const Icon(Icons.drive_file_rename_outline),
+
                       hintText: 'ชื่อสินค้า',
                       controller: _nameController,
                       validator: (value) {
@@ -662,10 +769,10 @@ class _GeneralUploadState extends State<GeneralUpload>
                           SizedBox(width: 6.w),
                           Text(
                             'หน่วยบรรจุ',
-                            style: TextStyle(
+                            style: styles(
                               fontSize: 13.sp,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey[800],
+                              color: context.subColor,
                             ),
                           ),
                         ],
@@ -694,7 +801,14 @@ class _GeneralUploadState extends State<GeneralUpload>
                                     .map(
                                       (p) => DropdownMenuItem(
                                         value: p,
-                                        child: Text(p),
+                                        child: Text(
+                                          p,
+                                          style: styles(
+                                            fontSize: 13.sp,
+                                            color: context.textColor,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -731,8 +845,22 @@ class _GeneralUploadState extends State<GeneralUpload>
                               border: const UnderlineInputBorder(),
                               focusedBorder: UnderlineInputBorder(
                                 borderSide: BorderSide(
-                                  color: mainColor,
+                                  color: Colors.yellow.shade900,
                                   width: 2,
+                                ),
+                              ),
+                              errorBorder: const UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Colors.red,
+                                  width: 2,
+                                ),
+                              ),
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: context.isDark
+                                      ? Colors.white70
+                                      : Colors.grey,
+                                  width: 1,
                                 ),
                               ),
                             ),
@@ -751,10 +879,10 @@ class _GeneralUploadState extends State<GeneralUpload>
                           SizedBox(width: 6.w),
                           Text(
                             'ปริมาณ',
-                            style: TextStyle(
+                            style: styles(
                               fontSize: 13.sp,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey[800],
+                              color: context.subColor,
                             ),
                           ),
                         ],
@@ -787,11 +915,30 @@ class _GeneralUploadState extends State<GeneralUpload>
                                 isExpanded: true,
                                 decoration: InputDecoration(
                                   labelText: 'หน่วย',
+                                  labelStyle: styles(
+                                    fontSize: 13.sp,
+                                    color: context.textColor,
+                                    fontWeight: FontWeight.w400,
+                                  ),
                                   border: const UnderlineInputBorder(),
                                   focusedBorder: UnderlineInputBorder(
                                     borderSide: BorderSide(
-                                      color: mainColor,
+                                      color: Colors.yellow.shade900,
                                       width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: const UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: context.isDark
+                                          ? Colors.white70
+                                          : Colors.grey,
+                                      width: 1,
                                     ),
                                   ),
                                 ),
@@ -799,7 +946,14 @@ class _GeneralUploadState extends State<GeneralUpload>
                                     .map(
                                       (u) => DropdownMenuItem(
                                         value: u,
-                                        child: Text(u),
+                                        child: Text(
+                                          u,
+                                          style: styles(
+                                            fontSize: 11.sp,
+                                            color: context.textColor,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -833,25 +987,56 @@ class _GeneralUploadState extends State<GeneralUpload>
                       ],
                     ],
                     SizedBox(height: 12.h),
-                    InputTextfield(
-                      textInputType: TextInputType.number,
-                      prefixIcon: const Icon(Icons.qr_code),
-                      hintText: 'จำนวน',
-                      controller: _qtyController,
-                      validator: (value) {
-                        if (value!.isEmpty) {
-                          return 'Please enter product quantity';
-                        }
-                        final qty = int.tryParse(value);
-                        if (qty == null || qty <= 0) {
-                          return 'Quantity must be greater than 0';
-                        }
-                        return null;
-                      },
-                      onChanged: (value) {
-                        provider.getFormData(qty: int.tryParse(value) ?? 0);
-                      },
+                    Transform.scale(
+                      scale: 0.85,
+                      child: SwitchListTile(
+                        title: Text(
+                          'ตัดสต๊อก',
+                          style: styles(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                            color: context.textColor,
+                          ),
+                        ),
+                        subtitle: Text(
+                          provider.trackStock
+                              ? 'จำกัดจำนวน — ตัดสต๊อกอัตโนมัติเมื่อขาย'
+                              : 'ไม่จำกัดจำนวน — เหมาะกับอาหาร/บริการ',
+                          style: styles(
+                            fontSize: 11.sp,
+                            color: context.subColor,
+                          ),
+                        ),
+                        value: provider.trackStock,
+                        onChanged: (val) => provider.setTrackStock(val),
+                        activeColor: mainColor,
+                        activeTrackColor: Colors.grey[200],
+                        inactiveTrackColor: Colors.grey[200],
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
+                    if (provider.trackStock) ...[
+                      SizedBox(height: 8.h),
+                      InputTextfield(
+                        textInputType: TextInputType.number,
+                        prefixIcon: const Icon(Icons.qr_code),
+                        hintText: 'จำนวน',
+                        controller: _qtyController,
+                        validator: (value) {
+                          if (value!.isEmpty) {
+                            return 'Please enter product quantity';
+                          }
+                          final qty = int.tryParse(value);
+                          if (qty == null || qty <= 0) {
+                            return 'Quantity must be greater than 0';
+                          }
+                          return null;
+                        },
+                        onChanged: (value) {
+                          provider.getFormData(qty: int.tryParse(value) ?? 0);
+                        },
+                      ),
+                    ],
                     TextFormField(
                       controller: _descController,
                       keyboardType: TextInputType.text,
@@ -865,18 +1050,25 @@ class _GeneralUploadState extends State<GeneralUpload>
                         }
                       },
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(
+                        border: UnderlineInputBorder(
                           borderRadius: BorderRadius.circular(5),
                         ),
                         labelText: 'รายละเอียดสินค้า',
-                        labelStyle: styles(color: Colors.black54),
-                        errorBorder: const OutlineInputBorder(
+                        labelStyle: styles(color: context.textColor),
+                        errorBorder: const UnderlineInputBorder(
                           borderSide: BorderSide(color: Colors.red, width: 2),
                         ),
-                        focusedBorder: OutlineInputBorder(
+                        focusedBorder: UnderlineInputBorder(
                           borderSide: BorderSide(
                             color: Colors.yellow.shade900,
                             width: 2,
+                          ),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
                           ),
                         ),
                       ),
@@ -885,7 +1077,19 @@ class _GeneralUploadState extends State<GeneralUpload>
                       },
                     ),
                     ExpansionTile(
-                      title: const Text('ตัวเลือกเมนู'),
+                      shape: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                          color: context.isDark ? Colors.white70 : Colors.grey,
+                        ),
+                      ),
+                      title: Text(
+                        'ตัวเลือกเมนู',
+                        style: styles(
+                          fontSize: 14.sp,
+                          color: context.textColor,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
                       subtitle: Text(
                         provider.optionGroups.isEmpty
                             ? ''
@@ -910,7 +1114,12 @@ class _GeneralUploadState extends State<GeneralUpload>
                             key: ValueKey(groupIndex),
                             title: Text(groupName),
                             subtitle: Text(
-                              '${groupTypeEnum.label} • ${options.length} ตัวเลือก',
+                              '${groupTypeEnum.label} / ${options.length} ตัวเลือก',
+                              style: styles(
+                                fontSize: 13.sp,
+                                color: context.textColor,
+                                fontWeight: FontWeight.w400,
+                              ),
                             ),
                             leading: Icon(
                               _getGroupIcon(groupType),
@@ -932,11 +1141,23 @@ class _GeneralUploadState extends State<GeneralUpload>
                                 Map<String, dynamic> option = optEntry.value;
                                 return ListTile(
                                   dense: true,
-                                  title: Text(option['name']),
+                                  title: Text(
+                                    option['name'],
+                                    style: styles(
+                                      fontSize: 14.sp,
+                                      color: context.textColor,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
                                   subtitle: Text(
                                     option['price'] == 0
                                         ? 'ฟรี'
                                         : '+฿${option['price']}',
+                                    style: styles(
+                                      fontSize: 14.sp,
+                                      color: context.textColor,
+                                      fontWeight: FontWeight.w400,
+                                    ),
                                   ),
                                   trailing: IconButton(
                                     icon: const Icon(
@@ -963,7 +1184,7 @@ class _GeneralUploadState extends State<GeneralUpload>
                                   style: styles(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14.sp,
-                                    color: Colors.black54,
+                                    color: context.textColor,
                                   ),
                                 ),
                                 onTap: () =>
@@ -982,111 +1203,13 @@ class _GeneralUploadState extends State<GeneralUpload>
                             style: styles(
                               fontWeight: FontWeight.w500,
                               fontSize: 13.sp,
-                              color: Colors.black54,
+                              color: context.textColor,
                             ),
                           ),
                           onTap: _addGroupDialog,
                         ),
                       ],
                     ),
-                    CheckboxListTile(
-                      activeColor: Colors.yellow.shade900,
-                      title: Text(
-                        'ค่าจัดส่ง',
-                        style: GoogleFonts.righteous(
-                          fontSize: 14.sp,
-                          letterSpacing: 1,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      value: _chargeShipping,
-                      onChanged: (value) {
-                        setState(() {
-                          _chargeShipping = value;
-                        });
-                        provider.getFormData(chargeShipping: _chargeShipping);
-                        if (value == false) {
-                          _shippingController.clear();
-                          provider.getFormData(shippingCharge: 0.0);
-                        }
-                      },
-                    ),
-                    if (_chargeShipping == true)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: TextFormField(
-                          controller: _shippingController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(
-                              CupertinoIcons.money_dollar_circle,
-                            ),
-                            hintText: 'ค่าจัดส่ง ',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.yellow.shade900,
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: const OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.red,
-                                width: 2,
-                              ),
-                            ),
-                            suffixText: '฿',
-                          ),
-                          validator: (value) {
-                            if (value!.isEmpty) {
-                              return 'Please enter shipping charge';
-                            }
-                            final charge = double.tryParse(value);
-                            if (charge == null || charge <= 0) {
-                              return 'Shipping charge must be greater than 0';
-                            }
-                            if (charge > 5) {
-                              return 'Shipping charge must not exceed 5';
-                            }
-                            return null;
-                          },
-                          onChanged: (value) {
-                            final newCharge = double.tryParse(value);
-                            if (newCharge != null && newCharge > 5.0) {
-                              showDialog(
-                                context: context,
-                                builder: (BuildContext ctx) => AlertDialog(
-                                  title: Icon(
-                                    Icons.warning,
-                                    color: Colors.orange,
-                                    size: 50.r,
-                                  ),
-                                  content: const Text(
-                                    'ไม่สามารถคิดค่าส่งเกิน 5 บาท',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx),
-                                      child: const Text('ตกลง'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              _shippingController.text = '5';
-                              provider.getFormData(shippingCharge: 5.0);
-                            } else if (newCharge != null) {
-                              provider.getFormData(shippingCharge: newCharge);
-                            }
-                          },
-                        ),
-                      ),
 
                     SizedBox(height: 12.h),
                     DropdownButtonFormField<String>(
@@ -1096,11 +1219,22 @@ class _GeneralUploadState extends State<GeneralUpload>
                       decoration: InputDecoration(
                         labelText: 'รูปแบบสินค้า',
                         border: const UnderlineInputBorder(),
-                        enabledBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: Colors.grey.shade400),
-                        ),
                         focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: mainColor, width: 2),
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
                         ),
                         contentPadding: EdgeInsets.symmetric(vertical: 8.h),
                         helperText: 'ส่งใกล้ร้าน,ส่งทั่วประเทศ',
@@ -1127,95 +1261,259 @@ class _GeneralUploadState extends State<GeneralUpload>
                       },
                     ),
                     if (_saleMode == 'ecommerce') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: _defaultCarrier,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          border: UnderlineInputBorder(),
+                          fillColor: mainColor,
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        items: _carriers
+                            .map(
+                              (c) => DropdownMenuItem(
+                                value: c,
+                                child: Text(
+                                  c,
+                                  style: styles(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.isDark
+                                        ? Colors.deepPurple[900]
+                                        : Colors.black54,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          setState(() => _defaultCarrier = v ?? 'Kerry');
+                          _saveCarrier();
+                        },
+                      ),
+                      if (_defaultCarrier == 'อื่นๆ') ...[
+                        SizedBox(height: 8.h),
+                        TextField(
+                          controller: _customCarrierController,
+                          style: styles(
+                            color: context.textColor,
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'ชื่อขนส่ง',
+
+                            border: UnderlineInputBorder(),
+                          ),
+                          onChanged: (_) => _saveCarrier(),
+                        ),
+                      ],
                       SizedBox(height: 12.h),
                       Text(
-                        'ค่าส่ง ขั้นบันได',
-                        style: TextStyle(
+                        'ค่าส่ง',
+                        style: styles(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
+                          color: context.textColor,
                         ),
                       ),
 
                       SizedBox(height: 20.h),
                       ...List.generate(_tierControllers.length, (i) {
                         final tier = _tierControllers[i];
-                        return Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(8.r),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: tier['qtyFrom'],
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: 'จาก',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 20.w,
-                                      vertical: 12.h,
-                                    ),
-                                    border: const OutlineInputBorder(),
-                                  ),
-                                ),
+                        return Row(
+                          children: [
+                            Text(
+                              'ขั้น ${i + 1}:',
+                              style: styles(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w600,
+                                color: context.subColor,
                               ),
-                              SizedBox(width: 8.w),
+                            ),
+                            SizedBox(width: 8.w),
+                            Expanded(
+                              child: TextField(
+                                controller: tier['qtyFrom'],
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: styles(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w400,
+                                  color: context.textColor,
+                                ),
+                                decoration: InputDecoration(
+                                  label: Text(
+                                    'จาก',
+                                    style: styles(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w400,
+                                      color: context.textColor,
+                                    ),
+                                  ),
 
-                              Expanded(
-                                child: TextField(
-                                  controller: tier['qtyTo'],
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: 'ถึง',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 20.w,
-                                      vertical: 12.h,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    vertical: 12.h,
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.yellow.shade900,
+                                      width: 2,
                                     ),
-                                    border: const OutlineInputBorder(),
+                                  ),
+                                  errorBorder: const UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: context.isDark
+                                          ? Colors.white70
+                                          : Colors.grey,
+                                      width: 1,
+                                    ),
                                   ),
                                 ),
                               ),
-                              SizedBox(width: 8.w),
-                              Text('ชิ้น =', style: TextStyle(fontSize: 12.sp)),
-                              SizedBox(width: 8.w),
-                              Expanded(
-                                child: TextField(
-                                  controller: tier['fee'],
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: '฿',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 20.w,
-                                      vertical: 12.h,
+                            ),
+                            SizedBox(width: 20.w),
+
+                            Expanded(
+                              child: TextField(
+                                controller: tier['qtyTo'],
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: styles(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w400,
+                                  color: context.textColor,
+                                ),
+                                decoration: InputDecoration(
+                                  label: Text(
+                                    'ถึง',
+                                    style: styles(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w400,
+                                      color: context.textColor,
                                     ),
-                                    border: const OutlineInputBorder(),
+                                  ),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    vertical: 12.h,
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.yellow.shade900,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: const UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: context.isDark
+                                          ? Colors.white70
+                                          : Colors.grey,
+                                      width: 1,
+                                    ),
                                   ),
                                 ),
                               ),
-                              if (_tierControllers.length > 1)
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.close,
-                                    color: Colors.red,
-                                    size: 20.sp,
-                                  ),
-                                  onPressed: () => _removeTier(i),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
+                            ),
+                            SizedBox(width: 20.w),
+
+                            Expanded(
+                              child: TextField(
+                                controller: tier['fee'],
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: styles(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w400,
+                                  color: context.textColor,
                                 ),
-                            ],
-                          ),
+                                decoration: InputDecoration(
+                                  label: Text(
+                                    'ค่าส่ง',
+                                    style: styles(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w400,
+                                      color: context.textColor,
+                                    ),
+                                  ),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    vertical: 12.h,
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.yellow.shade900,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: const UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: context.isDark
+                                          ? Colors.white70
+                                          : Colors.grey,
+                                      width: 1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_tierControllers.length > 1)
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                  size: 20.sp,
+                                ),
+                                onPressed: () => _removeTier(i),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                          ],
                         );
                       }),
                       TextButton.icon(
-                        icon: Icon(Icons.add_circle_outline, color: mainColor),
+                        icon: Icon(
+                          Icons.add_circle_outline,
+                          color: mainColor,
+                          size: 20.sp,
+                        ),
                         label: Text(
                           'เพิ่มขั้น',
-                          style: styles(color: mainColor),
+                          style: styles(color: mainColor, fontSize: 14.sp),
                         ),
                         onPressed: () {
                           final lastTo =
@@ -1223,7 +1521,7 @@ class _GeneralUploadState extends State<GeneralUpload>
                                 _tierControllers.last['qtyTo']?.text ?? '5',
                               ) ??
                               5;
-                          if (lastTo == 9) {
+                          if (lastTo == 5) {
                             _tierControllers.last['qtyTo']?.text = '5';
                           }
                           setState(
@@ -1235,21 +1533,21 @@ class _GeneralUploadState extends State<GeneralUpload>
                                       ) ??
                                       5) +
                                   1,
-                              qtyTo: 9,
+                              qtyTo: 5,
                               fee: 0,
                             ),
                           );
                         },
                       ),
-                      SizedBox(height: 12.h),
+
+                      SizedBox(height: 8.h),
                       Text(
-                        'เกินจากขั้นสุดท้าย (optional)',
-                        style: TextStyle(
+                        'เกินจากขั้นสุดท้าย',
+                        style: styles(
                           fontSize: 12.sp,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-
                       SizedBox(height: 8.h),
                       Row(
                         children: [
@@ -1257,29 +1555,87 @@ class _GeneralUploadState extends State<GeneralUpload>
                             child: TextField(
                               controller: _extraBaseController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'ค่าฐาน (฿)',
-                                border: OutlineInputBorder(),
+                              textAlign: TextAlign.center,
+                              style: styles(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                color: context.textColor,
+                              ),
+                              decoration: InputDecoration(
+                                label: Text(
+                                  'ประกันค่าขนส่ง',
+                                  style: styles(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.textColor,
+                                  ),
+                                ),
+                                focusedBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Colors.yellow.shade900,
+                                    width: 2,
+                                  ),
+                                ),
+                                errorBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Colors.red,
+                                    width: 2,
+                                  ),
+                                ),
+                                enabledBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: context.isDark
+                                        ? Colors.white70
+                                        : Colors.grey,
+                                    width: 1,
+                                  ),
+                                ),
                                 isDense: true,
                               ),
                             ),
                           ),
-                          SizedBox(width: 8.w),
-                          Text(
-                            '+',
-                            style: TextStyle(
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(width: 8.w),
+
+                          SizedBox(width: 20.w),
                           Expanded(
                             child: TextField(
                               controller: _extraPerUnitController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: '฿ ต่อชิ้น',
-                                border: OutlineInputBorder(),
+                              textAlign: TextAlign.center,
+                              style: styles(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w400,
+                                color: context.textColor,
+                              ),
+                              decoration: InputDecoration(
+                                label: Text(
+                                  'ค่าส่งเกินขั้นสุดท้าย',
+                                  style: styles(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.textColor,
+                                  ),
+                                ),
+
+                                focusedBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Colors.yellow.shade900,
+                                    width: 2,
+                                  ),
+                                ),
+                                errorBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Colors.red,
+                                    width: 2,
+                                  ),
+                                ),
+                                enabledBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: context.isDark
+                                        ? Colors.white70
+                                        : Colors.grey,
+                                    width: 1,
+                                  ),
+                                ),
                                 isDense: true,
                               ),
                             ),
@@ -1289,10 +1645,26 @@ class _GeneralUploadState extends State<GeneralUpload>
                       SizedBox(height: 8.h),
                       TextField(
                         controller: _shippingNoteController,
-                        decoration: const InputDecoration(
-                          labelText: 'หมายเหตุการส่ง (optional)',
+                        decoration: InputDecoration(
+                          labelText: 'หมายเหตุการส่ง',
                           hintText: 'เช่น Kerry 1-3 วันทำการ',
-                          border: OutlineInputBorder(),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -1303,13 +1675,18 @@ class _GeneralUploadState extends State<GeneralUpload>
                         style: styles(
                           fontSize: 13.sp,
                           fontWeight: FontWeight.w400,
-                          color: Colors.black54,
+                          color: context.textColor,
                         ),
                       ),
                       subtitle: Text(
                         _scheduleDate != null
                             ? DateFormat('dd/MM/yyyy').format(_scheduleDate!)
                             : 'Not set',
+                        style: styles(
+                          fontSize: 11.sp,
+                          color: context.textColor,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
@@ -1373,7 +1750,6 @@ class _GeneralUploadState extends State<GeneralUpload>
                                     EasyLoading.dismiss();
                                   }
 
-                                  // Step 2: Save product
                                   if (!context.mounted) return;
                                   if (_scannedBarcode != null) {
                                     provider.getFormData(
@@ -1447,10 +1823,18 @@ class _GeneralUploadState extends State<GeneralUpload>
                                         ? _shippingNoteController.text.trim()
                                         : '',
                                   );
+                                  provider.getFormData(
+                                    shippingCarrier: _saleMode == 'ecommerce'
+                                        ? (_defaultCarrier == 'อื่นๆ'
+                                              ? _customCarrierController.text
+                                                    .trim()
+                                              : _defaultCarrier)
+                                        : '',
+                                    notify: false,
+                                  );
                                   final barcodeToSave = _scannedBarcode;
                                   await provider.saveProduct(context);
 
-                                  // Update products_master after successful save
                                   if (barcodeToSave != null &&
                                       barcodeToSave.isNotEmpty) {
                                     try {
@@ -1693,5 +2077,24 @@ class _GeneralUploadState extends State<GeneralUpload>
         );
       },
     );
+  }
+
+  Future<void> _saveCarrier() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final carrierToSave = _defaultCarrier == 'อื่นๆ'
+        ? _customCarrierController.text.trim()
+        : _defaultCarrier;
+    if (carrierToSave.isEmpty) return;
+    try {
+      await _firestore.collection('vendors').doc(uid).update({
+        'defaultCarrier': carrierToSave,
+        'customCarrier': _defaultCarrier == 'อื่นๆ'
+            ? _customCarrierController.text.trim()
+            : '',
+      });
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'บันทึกผิดพลาด: $e');
+    }
   }
 }

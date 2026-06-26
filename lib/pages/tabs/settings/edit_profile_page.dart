@@ -1,6 +1,8 @@
 // ignore_for_file: use_build_context_synchronously, avoid_print, unused_field
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
@@ -30,6 +32,10 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   ThaiAddress? _selectedAddress;
+  Province? _initialProvince;
+  District? _initialDistrict;
+  SubDistrict? _initialSubDistrict;
+  bool _addressLoaded = false;
   String name = '';
   String ownerName = '';
   String email = '';
@@ -212,6 +218,37 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
         Fluttertoast.showToast(msg: 'ไม่พบข้อมูลโปรไฟล์ กรุณาลงทะเบียนใหม่');
         Get.to(() => const VendorRegistorPage());
       }
+      // โหลด Province/District/SubDistrict objects จาก repository
+      try {
+        final repo = ThaiAddressRepository();
+        await repo.initialize();
+
+        if (province.isNotEmpty) {
+          _initialProvince = repo.provinces.firstWhereOrNull(
+            (p) => p.nameTh == province,
+          );
+          if (_initialProvince != null && district.isNotEmpty) {
+            _initialDistrict = repo.districts.firstWhereOrNull(
+              (x) =>
+                  x.nameTh == district && x.provinceId == _initialProvince!.id,
+            );
+            if (_initialDistrict != null && subdistrict.isNotEmpty) {
+              _initialSubDistrict = repo.subDistricts.firstWhereOrNull(
+                (x) =>
+                    x.nameTh == subdistrict &&
+                    x.districtId == _initialDistrict!.id,
+              );
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading address objects: $e');
+      }
+      if (mounted) {
+        setState(() {
+          _addressLoaded = true;
+        });
+      }
     } catch (e) {
       Fluttertoast.showToast(msg: 'เกิดข้อผิดพลาดในการโหลดข้อมูล: $e');
     } finally {
@@ -310,8 +347,9 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
           'address': addres,
           'vzipcode': zipcode,
           'country': country,
-          'state': district,
-          'city': province,
+          'province': province,
+          'district': district,
+          'subdistrict': subdistrict,
           'taxStatus': _taxStatus ?? 'NO',
           'taxNo': _taxStatus == 'YES' ? taxNumber : 'null',
           'image': imageUrl,
@@ -420,7 +458,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
     if (bytes != null) {
       imageProvider = MemoryImage(bytes);
     } else if (url != null && url.isNotEmpty) {
-      imageProvider = NetworkImage(url);
+      imageProvider = CachedNetworkImageProvider(url);
     } else {
       imageProvider = AssetImage(placeholderAsset);
     }
@@ -458,16 +496,6 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
       return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'แก้ไขโปรไฟล์',
-          style: styles(fontSize: 16.sp, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => Get.back(),
-        ),
-      ),
       body: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -476,19 +504,19 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
             children: [
               SizedBox(
                 width: double.infinity,
-                height: 170.h,
+                height: 190.h,
                 child: Center(
                   child: Stack(
                     children: [
                       Container(
-                        height: 170.h,
+                        height: 190.h,
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade300,
                           borderRadius: BorderRadius.circular(0),
                           image: DecorationImage(
                             image: image == null && currentImageUrl != null
-                                ? NetworkImage(currentImageUrl!)
+                                ? CachedNetworkImageProvider(currentImageUrl!)
                                 : (image != null
                                       ? MemoryImage(image!)
                                       : AssetImage('images/viewcover.jpg')),
@@ -509,7 +537,9 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                                       image:
                                           faceImage == null &&
                                               currentFaceImageUrl != null
-                                          ? NetworkImage(currentFaceImageUrl!)
+                                          ? CachedNetworkImageProvider(
+                                              currentFaceImageUrl!,
+                                            )
                                           : (faceImage != null
                                                 ? MemoryImage(faceImage!)
                                                 : AssetImage(
@@ -589,6 +619,18 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                           ),
                         ),
                       ),
+                      Positioned(
+                        top: 30.h,
+                        left: 20.w,
+                        child: CircleAvatar(
+                          radius: 20.sp,
+                          backgroundColor: Colors.cyan.shade400,
+                          child: IconButton(
+                            icon: Icon(Icons.arrow_back, color: Colors.white),
+                            onPressed: () => Get.back(),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -600,10 +642,11 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                   children: [
                     SizedBox(height: 12.h),
                     Text(
-                      'ข้อมูลร้าน',
+                      'แก้ไขข้อมูลร้าน',
                       style: styles(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w600,
+                        color: context.isDark ? Colors.cyan : Colors.black54,
                       ),
                     ),
                     SizedBox(height: 12.h),
@@ -648,7 +691,6 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                             },
                           ),
                         ),
-                        SizedBox(width: 10.w),
                         SizedBox(width: width * .4),
                       ],
                     ),
@@ -659,7 +701,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                         controller: _cardOwnerNameController,
                         hintText: 'ชื่อจากบัตร',
                         textInputType: TextInputType.text,
-                        enabled: true, // สามารถแก้ไขได้
+                        enabled: true,
                         prefixIcon: Icon(Icons.person, color: Colors.blue),
                         onChanged: (value) =>
                             setState(() => cardOwnerName = value),
@@ -697,10 +739,36 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                     DropdownButtonFormField<String>(
                       initialValue: _categoryDropdownValue,
                       hint: const Text('เลือกหมวดหมู่'),
+                      decoration: InputDecoration(
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: Colors.yellow.shade900,
+                            width: 2,
+                          ),
+                        ),
+                        errorBorder: const UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.red, width: 2),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                            color: context.isDark
+                                ? Colors.white70
+                                : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                      ),
                       items: _categoryList.map((String category) {
                         return DropdownMenuItem<String>(
                           value: category,
-                          child: Text(category),
+                          child: Text(
+                            category,
+                            style: styles(
+                              fontSize: 14.sp,
+                              color: context.textColor,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
                         );
                       }).toList(),
                       onChanged: (value) =>
@@ -709,7 +777,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                           value == null ? 'กรุณาเลือกหมวดหมู่' : null,
                     ),
                     SizedBox(height: 20.h),
-                    // ชื่อร้าน
+
                     InputTextfield(
                       controller: _storeNameController,
                       hintText: 'ชื่อร้าน',
@@ -767,7 +835,33 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                       padding: const EdgeInsets.only(left: 0, right: 0),
                       child: DropdownButtonFormField<String>(
                         initialValue: _bankDropdownValue,
-                        hint: const Text('เลือกธนาคาร'),
+                        hint: Text(
+                          'เลือกธนาคาร',
+                          style: styles(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w400,
+                            color: context.textColor,
+                          ),
+                        ),
+                        decoration: InputDecoration(
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
                         isExpanded: true,
                         items: _bankList.map((String bank) {
                           return DropdownMenuItem<String>(
@@ -777,7 +871,11 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                               child: Text(
                                 bank,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 14),
+                                style: styles(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w400,
+                                  color: context.textColor,
+                                ),
                                 maxLines: 1,
                               ),
                             ),
@@ -817,7 +915,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                       onChanged: (value) => setState(() => promptPayId = value),
                       validator: (value) => null,
                     ),
-                    // QR upload
+
                     if (_bankDropdownValue != null &&
                         _promptPayIdController.text.trim().isEmpty)
                       Padding(
@@ -841,7 +939,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                                     currentQrImageUrl,
                                     qrImage,
                                     placeholderAsset:
-                                        'images/qr_placeholder.jpg', // สมมติมี asset
+                                        'images/qr_placeholder.jpg',
                                     icon: Icons.qr_code,
                                     label: 'อัปโหลด QR Code',
                                     onTap: () => chooseQRImageOption(context),
@@ -887,44 +985,163 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                     ),
 
                     SizedBox(height: 12.h),
-                    ThaiAddressForm(
-                      textStyle: styles(
-                        fontSize: 14.sp,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w500,
+                    if (_addressLoaded)
+                      ThaiAddressForm(
+                        initialProvince: _initialProvince,
+                        initialDistrict: _initialDistrict,
+                        initialSubDistrict: _initialSubDistrict,
+                        provinceDecoration: InputDecoration(
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        districtDecoration: InputDecoration(
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        subDistrictDecoration: InputDecoration(
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        zipCodeDecoration: InputDecoration(
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.yellow.shade900,
+                              width: 2,
+                            ),
+                          ),
+                          errorBorder: const UnderlineInputBorder(
+                            borderSide: BorderSide(color: Colors.red, width: 2),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: context.isDark
+                                  ? Colors.white70
+                                  : Colors.grey,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        textStyle: styles(
+                          fontSize: 14.sp,
+                          color: context.textColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        onChanged: (address) {
+                          if ((address.provinceTh ?? '').isEmpty) return;
+                          if ((address.districtTh ?? '').isEmpty) return;
+                          if ((address.subDistrictTh ?? '').isEmpty) return;
+                          if ((address.zipCode ?? '').isEmpty) return;
+                          setState(() {
+                            _selectedAddress = address;
+                            province = address.provinceTh ?? '';
+                            district = address.districtTh ?? '';
+                            subdistrict = address.subDistrictTh ?? '';
+                            zipcode = address.zipCode ?? '';
+                          });
+                        },
+                        useThai: true,
+                      )
+                    else
+                      SizedBox(
+                        height: 200.h,
+                        child: const Center(child: CircularProgressIndicator()),
                       ),
-
-                      onChanged: (address) {
-                        setState(() {});
-                        if ((address.provinceTh ?? '').isEmpty) return;
-                        if ((address.districtTh ?? '').isEmpty) return;
-                        if ((address.subDistrictTh ?? '').isEmpty) return;
-                        if ((address.zipCode ?? '').isEmpty) return;
-                        setState(() => _selectedAddress = address);
-                      },
-                      useThai: true,
-                    ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Tax Registered?',
-                          style: styles(
-                            color: Colors.cyan.shade600,
-                            fontSize: 16,
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            'จดทะเบียนบริษัท',
+                            style: styles(
+                              color: Colors.cyan.shade500,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 10),
                         Flexible(
                           child: SizedBox(
-                            width: 100,
+                            width: 90,
                             child: DropdownButtonFormField(
                               initialValue: _taxStatus,
+                              alignment: Alignment.center,
+                              style: styles(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.zero,
+                                focusedBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Colors.yellow.shade900,
+                                    width: 2,
+                                  ),
+                                ),
+                                errorBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: Colors.red,
+                                    width: 2,
+                                  ),
+                                ),
+                                enabledBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: context.isDark
+                                        ? Colors.white70
+                                        : Colors.grey,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
                               hint: Text(
                                 'Select',
                                 style: styles(
                                   color: Colors.cyan.shade600,
-                                  fontSize: 16,
+                                  fontSize: 14.sp,
                                 ),
                               ),
                               items: _taxOptions
@@ -933,7 +1150,10 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                                       value: value,
                                       child: Text(
                                         value,
-                                        style: styles(color: Colors.deepOrange),
+                                        style: styles(
+                                          color: Colors.deepOrange,
+                                          fontSize: 14.sp,
+                                        ),
                                       ),
                                     ),
                                   )
@@ -947,7 +1167,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                     ),
                     if (_taxStatus == 'YES') ...[
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: EdgeInsets.symmetric(horizontal: 6.w),
                         child: TextFormField(
                           controller: _taxNumberController,
                           keyboardType: TextInputType.number,
@@ -957,7 +1177,7 @@ class _VendorProfileEditPageState extends State<VendorProfileEditPage> {
                               ? 'Please Tax Number must not be empty'
                               : null,
                           decoration: InputDecoration(
-                            labelText: 'Tax Number',
+                            labelText: 'เลขประจำตัวผู้เสียภาษี',
                             labelStyle: styles(color: Colors.cyan.shade600),
                           ),
                         ),

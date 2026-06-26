@@ -68,11 +68,8 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
           Center(
             child: Container(
               width: width * 0.9,
-              height: 20.h,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.redAccent, width: 2),
-                borderRadius: BorderRadius.circular(2.r),
-              ),
+              height: 2.h,
+              color: Colors.redAccent,
             ),
           ),
           Positioned(

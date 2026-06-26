@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colae_shop/pages/terms_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -47,10 +48,19 @@ class _LoginPageState extends State<LoginPage>
         }
 
         _formKey.currentState!.reset();
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LandingPage()),
-        );
+        final acceptedVer =
+            vendorDoc.data()?['termsAcceptedVersion'] as String?;
+        if (acceptedVer == CURRENT_TERMS_VERSION) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LandingPage()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const TermsPage()),
+          );
+        }
       } on FirebaseAuthException catch (e) {
         setState(() => _isLoading = false);
         String msg = e.code == 'user-not-found'

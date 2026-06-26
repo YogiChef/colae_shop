@@ -80,6 +80,29 @@ class _UnpublishedTabState extends State<UnpublishedTab> {
     }
   }
 
+  Widget _productRating(Map<String, dynamic> d) {
+    final double avg = (d['averageRating'] as num?)?.toDouble() ?? 0.0;
+    final int count = (d['ratingCount'] as num?)?.toInt() ?? 0;
+    if (count == 0) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.star, size: 16.sp, color: Colors.amber),
+        SizedBox(width: 2.w),
+        Text(
+          avg.toStringAsFixed(1),
+          style: styles(
+            fontSize: 11.sp,
+            fontWeight: FontWeight.w600,
+            color: context.textColor,
+          ),
+        ),
+        // SizedBox(width: 2.w),
+        // Text('($count)', style: styles(fontSize: 10.sp, color: Colors.grey)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -157,8 +180,8 @@ class _UnpublishedTabState extends State<UnpublishedTab> {
                           Stack(
                             children: [
                               SizedBox(
-                                height: 80.w,
-                                width: 110.w,
+                                height: 110.w,
+                                width: 140.w,
                                 child: hasImage
                                     ? CachedNetworkImage(
                                         imageUrl: imageUrl,
@@ -170,10 +193,10 @@ class _UnpublishedTabState extends State<UnpublishedTab> {
                                 Positioned.fill(
                                   child: Container(
                                     color: Colors.black87.withAlpha(60),
-                                    child: const Center(
+                                    child: Center(
                                       child: Text(
                                         'Out of Stock',
-                                        style: TextStyle(color: Colors.white),
+                                        style: styles(color: Colors.white),
                                       ),
                                     ),
                                   ),
@@ -190,21 +213,40 @@ class _UnpublishedTabState extends State<UnpublishedTab> {
                                 children: [
                                   Text(
                                     data['proName']?.toString() ?? 'Unnamed',
-                                    style: styles(fontSize: 13.sp),
-                                  ),
-                                  Text(
-                                    '฿${(data['price'] as num?)?.toString() ?? '0'}',
-                                    style: styles(fontSize: 12.sp),
-                                  ),
-                                  Text(
-                                    '$pqty pcs.',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: styles(
-                                      fontSize: 12.sp,
-                                      color: pqty <= 10
-                                          ? Colors.red
+                                      fontSize: 13.sp,
+                                      color: context.isDark
+                                          ? Colors.deepPurple[900]
                                           : Colors.black54,
                                     ),
                                   ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '$pqty pcs.',
+                                        style: styles(
+                                          fontSize: 12.sp,
+                                          color: context.isDark
+                                              ? Colors.white
+                                              : pqty <= 10
+                                              ? Colors.red
+                                              : Colors.black54,
+                                        ),
+                                      ),
+                                      Spacer(),
+                                      Text(
+                                        '฿${(data['price'] as num?)?.toString() ?? '0'}',
+                                        style: styles(
+                                          fontSize: 12.sp,
+                                          color: context.textColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  _productRating(data),
                                 ],
                               ),
                             ),
@@ -219,13 +261,14 @@ class _UnpublishedTabState extends State<UnpublishedTab> {
                       SlidableAction(
                         onPressed: (_) => _deleteProduct(id),
                         backgroundColor: const Color(0xFFFE4A49),
+                        foregroundColor: Colors.white,
                         icon: Icons.delete,
                         label: 'ลบ',
                       ),
                       SlidableAction(
-                        onPressed: (_) =>
-                            _publishProduct(id), // ← เปลี่ยนเป็น publish
+                        onPressed: (_) => _publishProduct(id),
                         backgroundColor: const Color(0xFF4CAF50),
+                        foregroundColor: Colors.white,
                         icon: Icons.publish,
                         label: 'เผยแพร่',
                       ),

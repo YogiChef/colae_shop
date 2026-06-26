@@ -2,6 +2,7 @@
 
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -506,7 +507,7 @@ class _RoomFormPageState extends State<RoomFormPage> {
     final allItems = <Widget>[];
     for (int i = 0; i < _existingImages.length; i++) {
       allItems.add(_imageItem(
-        image: NetworkImage(_existingImages[i]),
+        image: CachedNetworkImageProvider(_existingImages[i]),
         onRemove: () => setState(() => _existingImages.removeAt(i)),
       ));
     }

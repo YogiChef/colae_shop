@@ -1,6 +1,7 @@
 // Updated ChatdetailPage.dart - Added confirmation button for vendor on pending slips
 // ignore_for_file: unnecessary_cast
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -136,19 +137,18 @@ class _ChatdetailPageState extends State<ChatdetailPage>
         onTap: () => _zoomSlip(imageUrl, widget.proId),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12.r),
-          child: Image.network(
-            imageUrl,
+          child: CachedNetworkImage(
+            imageUrl: imageUrl,
             height: 0.35.sh,
             width: 0.5.sw,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stack) => Container(
+            memCacheWidth: 800,
+            placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+            errorWidget: (_, __, ___) => Container(
               height: 200.h,
               color: Colors.grey.shade300,
               child: const Icon(Icons.error, color: Colors.red),
             ),
-            loadingBuilder: (context, child, loading) => loading != null
-                ? const Center(child: CircularProgressIndicator())
-                : child,
           ),
         ),
       );
@@ -217,14 +217,12 @@ class _ChatdetailPageState extends State<ChatdetailPage>
               Expanded(
                 child: InteractiveViewer(
                   child: Center(
-                    child: Image.network(
-                      url,
+                    child: CachedNetworkImage(
+                      imageUrl: url,
                       fit: BoxFit.fitWidth,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(child: CircularProgressIndicator());
-                      },
-                      errorBuilder: (context, error, stackTrace) {
+                      memCacheWidth: 1200,
+                      placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                      errorWidget: (context, error, stackTrace) {
                         return const Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -305,7 +303,7 @@ class _ChatdetailPageState extends State<ChatdetailPage>
                                   padding: const EdgeInsets.only(left: 8.0),
                                   child: CircleAvatar(
                                     radius: 16.r,
-                                    backgroundImage: NetworkImage(
+                                    backgroundImage: CachedNetworkImageProvider(
                                       data['buyerPhoto'] ?? '',
                                     ),
                                     onBackgroundImageError: (_, _) =>

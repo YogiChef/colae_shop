@@ -628,6 +628,19 @@ class _PreparTabState extends State<PreparTab>
       final batch = firestore.batch();
       final orderRef = firestore.collection('orders').doc(orderId);
       int acceptedCount = 0;
+      final Map<String, bool> trackStockMap = {};
+      for (final item in itemsList) {
+        if (!(item['accepted'] ?? false) && !(item['cancelled'] ?? false)) {
+          final proId = item['proId']?.toString() ?? '';
+          if (proId.isNotEmpty && !trackStockMap.containsKey(proId)) {
+            final snap = await firestore
+                .collection('products')
+                .doc(proId)
+                .get();
+            trackStockMap[proId] = snap.data()?['trackStock'] as bool? ?? true;
+          }
+        }
+      }
       for (final item in itemsList) {
         final mutableItem = Map<String, dynamic>.from(item);
         if (!(mutableItem['accepted'] ?? false) &&
@@ -636,7 +649,7 @@ class _PreparTabState extends State<PreparTab>
           acceptedCount++;
           final proId = mutableItem['proId']?.toString() ?? '';
           final qty = (mutableItem['quantity'] as num?)?.toInt() ?? 1;
-          if (proId.isNotEmpty) {
+          if (proId.isNotEmpty && (trackStockMap[proId] ?? true)) {
             batch.update(firestore.collection('products').doc(proId), {
               'pqty': FieldValue.increment(-qty),
             });
@@ -688,6 +701,19 @@ class _PreparTabState extends State<PreparTab>
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
       double foodTotal = 0.0;
+      final Map<String, bool> trackStockMap = {};
+      for (final item in updatedItems) {
+        if (!(item['accepted'] ?? false) && !(item['cancelled'] ?? false)) {
+          final proId = item['proId']?.toString() ?? '';
+          if (proId.isNotEmpty && !trackStockMap.containsKey(proId)) {
+            final snap = await firestore
+                .collection('products')
+                .doc(proId)
+                .get();
+            trackStockMap[proId] = snap.data()?['trackStock'] as bool? ?? true;
+          }
+        }
+      }
       final batch = firestore.batch();
       for (var item in updatedItems) {
         final bool cancelled = item['cancelled'] ?? false;
@@ -701,7 +727,7 @@ class _PreparTabState extends State<PreparTab>
           item['accepted'] = true;
           final proId = item['proId']?.toString() ?? '';
           final qty = (item['quantity'] as num?)?.toInt() ?? 1;
-          if (proId.isNotEmpty) {
+          if (proId.isNotEmpty && (trackStockMap[proId] ?? true)) {
             batch.update(firestore.collection('products').doc(proId), {
               'pqty': FieldValue.increment(-qty),
             });
@@ -920,31 +946,30 @@ class _PreparTabState extends State<PreparTab>
       );
     }
     if (_cachedOrders.isEmpty) {
-      return SingleChildScrollView(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.restaurant_menu_outlined,
-                size: 90.sp,
-                color: Colors.yellow.shade900,
-              ),
-              SizedBox(height: 20.h),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.w),
-                child: Text(
-                  'รอออร์เดอร์ใหม่เข้ามานะครับ 🍕',
-                  textAlign: TextAlign.center,
-                  style: styles(
-                    fontSize: 20.sp,
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
+      return Flexible(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.restaurant_menu_outlined,
+              size: 90.sp,
+              color: Colors.yellow.shade900,
+            ),
+            SizedBox(height: 20.h),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20.w),
+              child: Text(
+                'รอออร์เดอร์ใหม่เข้ามานะครับ 🍕',
+                textAlign: TextAlign.center,
+                style: styles(
+                  fontSize: 20.sp,
+                  color: Colors.red,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -1463,7 +1488,10 @@ class _OrderCardState extends State<OrderCard> {
     }
   }
 
-  Future<void> _handleShipped(String orderId) async {
+  Future<void> _handleShipped(
+    String orderId,
+    Map<String, dynamic> orderData,
+  ) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
@@ -1471,7 +1499,34 @@ class _OrderCardState extends State<OrderCard> {
         .collection('vendors')
         .doc(uid)
         .get();
-    final carrier = (vendorDoc.data()?['defaultCarrier'] as String?) ?? 'Kerry';
+
+    // ดึง carrier จาก product แรกของ order, fallback เป็น vendor default
+    String productCarrier = '';
+    try {
+      final items = orderData['items'] as List<dynamic>? ?? [];
+      if (items.isNotEmpty) {
+        final firstProId =
+            (items[0] as Map<String, dynamic>)['proId']?.toString() ?? '';
+        if (firstProId.isNotEmpty) {
+          final productDoc = await FirebaseFirestore.instance
+              .collection('products')
+              .doc(firstProId)
+              .get();
+          productCarrier =
+              (productDoc.data()?['shippingCarrier'] as String?)?.trim() ?? '';
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching product carrier: $e');
+    }
+
+    final vendorCarrier =
+        (vendorDoc.data()?['defaultCarrier'] as String?) ?? 'Kerry';
+    final carrier =
+        productCarrier.isNotEmpty ? productCarrier : vendorCarrier;
+    // TODO: handle multi-item orders with different carriers
+    // ปัจจุบัน: ใช้ carrier ของ product แรก (items[0])
+    // อนาคต: split order หรือแสดง carrier ต่างกันต่อ item
 
     if (carrier.isEmpty) {
       Fluttertoast.showToast(msg: 'กรุณาตั้งค่าขนส่งใน Settings ก่อน');
@@ -2004,7 +2059,7 @@ class _OrderCardState extends State<OrderCard> {
                             horizontal: 10.w,
                           ),
                         ),
-                        onPressed: () => _handleShipped(orderId),
+                        onPressed: () => _handleShipped(orderId, orderDataMap),
                       ),
                     ),
                   );

@@ -7,16 +7,16 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 class ModeCard extends StatelessWidget {
   const ModeCard({
     super.key,
-    required this.icon,
     required this.color,
     required this.title,
     required this.subtitle,
     required this.enabled,
     required this.onTap,
-    this.badgeCount = 0, // ← เพิ่ม
+    this.badgeCount = 0,
+    required this.image, // ← เพิ่ม
   });
 
-  final IconData icon;
+  final Image image;
   final Color color;
   final String title;
   final String subtitle;
@@ -30,7 +30,12 @@ class ModeCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(7.r),
       child: Container(
-        padding: EdgeInsets.all(20.w),
+        padding: EdgeInsets.only(
+          top: 20.h,
+          left: 8.w,
+          bottom: 20.h,
+          right: 20.w,
+        ),
         decoration: BoxDecoration(
           color: mainColor,
           borderRadius: BorderRadius.circular(7.r),
@@ -51,16 +56,14 @@ class ModeCard extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  padding: EdgeInsets.all(16.w),
+                  width: 90.w,
+                  height: 90.w,
+                  padding: EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: (enabled ? Colors.white : color),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    icon,
-                    size: 40.sp,
-                    color: enabled ? color : Colors.grey,
-                  ),
+                  child: image,
                 ),
                 if (badgeCount > 0)
                   Positioned(
@@ -82,7 +85,7 @@ class ModeCard extends StatelessWidget {
                       ),
                       child: Text(
                         badgeCount > 99 ? '99+' : '$badgeCount',
-                        style: TextStyle(
+                        style: styles(
                           color: Colors.white,
                           fontSize: 11.sp,
                           fontWeight: FontWeight.bold,
@@ -104,7 +107,7 @@ class ModeCard extends StatelessWidget {
                         title,
                         style: styles(
                           fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
                           color: enabled ? Colors.white : Colors.black87,
                         ),
                       ),

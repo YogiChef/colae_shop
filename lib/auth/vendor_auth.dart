@@ -1,5 +1,6 @@
 // lib/auth/vendor_auth_page.dart
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide EmailAuthProvider;
 import 'package:firebase_ui_auth/firebase_ui_auth.dart';
@@ -10,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:colae_shop/auth/registor/vendor_registor_page.dart';
 import 'package:colae_shop/models/vendor_model.dart';
 import 'package:colae_shop/pages/main_vendor_page.dart';
+import 'package:colae_shop/pages/terms_page.dart';
 import 'package:colae_shop/providers/vendor_order_provider.dart';
 import 'package:colae_shop/services/sevice.dart';
 
@@ -240,16 +242,16 @@ class _VendorAuthPageState extends State<VendorAuthPage> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(5),
-                          child: Image.network(
-                            vendorModel.image.isNotEmpty
+                          child: CachedNetworkImage(
+                            imageUrl: vendorModel.image.isNotEmpty
                                 ? vendorModel.image
                                 : 'https://via.placeholder.com/90',
                             width: 90,
                             height: 90,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.error, size: 90);
-                            },
+                            memCacheWidth: 200,
+                            placeholder: (_, __) => Container(color: Colors.grey.shade200),
+                            errorWidget: (_, __, ___) => const Icon(Icons.error, size: 90),
                           ),
                         ),
                         const SizedBox(height: 15),
@@ -316,6 +318,13 @@ class _VendorAuthPageState extends State<VendorAuthPage> {
                     ],
                   ),
                 );
+              }
+              final rawVendorData =
+                  vendorSnapshot.data!.data() as Map<String, dynamic>;
+              final acceptedVer =
+                  rawVendorData['termsAcceptedVersion'] as String?;
+              if (acceptedVer != CURRENT_TERMS_VERSION) {
+                return const TermsPage();
               }
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 Provider.of<VendorOrderProvider>(

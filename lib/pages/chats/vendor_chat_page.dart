@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -77,7 +78,7 @@ class _VendorChatPageState extends State<VendorChatPage> {
               return ListTile(
                 leading: CircleAvatar(
                   radius: 20.r,
-                  backgroundImage: NetworkImage(data['buyerPhoto'] ?? ''),
+                  backgroundImage: CachedNetworkImageProvider(data['buyerPhoto'] ?? ''),
                   onBackgroundImageError: (_, _) => Icon(Icons.person),
                 ),
                 title: Text('Id ${proId.substring(0, 8)}'),
@@ -96,10 +97,12 @@ class _VendorChatPageState extends State<VendorChatPage> {
                         imageUrl != null)
                       SizedBox(
                         height: 60.h,
-                        child: Image.network(
-                          imageUrl,
+                        child: CachedNetworkImage(
+                          imageUrl: imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) =>
+                          memCacheWidth: 400,
+                          placeholder: (_, __) => Container(color: Colors.grey.shade200),
+                          errorWidget: (_, __, ___) =>
                               Icon(Icons.broken_image, size: 20.r),
                         ),
                       ),

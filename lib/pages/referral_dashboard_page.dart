@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -126,38 +125,12 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
     return (doc.data()?['total_sales'] as num?)?.toDouble() ?? 0;
   }
 
-  String _formatThaiMonth(String monthKey) {
-    const monthNames = [
-      'ม.ค.',
-      'ก.พ.',
-      'มี.ค.',
-      'เม.ย.',
-      'พ.ค.',
-      'มิ.ย.',
-      'ก.ค.',
-      'ส.ค.',
-      'ก.ย.',
-      'ต.ค.',
-      'พ.ย.',
-      'ธ.ค.',
-    ];
-    final parts = monthKey.split('-');
-    if (parts.length == 2) {
-      final monthIdx = int.tryParse(parts[1]);
-      final year = int.tryParse(parts[0]);
-      if (monthIdx != null && monthIdx >= 1 && monthIdx <= 12 && year != null) {
-        return '${monthNames[monthIdx - 1]} ${year + 543}';
-      }
-    }
-    return monthKey;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'ธุรกรรม',
+          'บริหารธุรกิจ',
           style: styles(
             fontSize: 20.sp,
             color: Colors.white,
@@ -238,11 +211,6 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                     children: [
                       _codeCard(code),
                       _qualCard2Monthly(),
-                      FutureBuilder<double>(
-                        future: _getMonthlyAmount(),
-                        builder: (context, snap) =>
-                            _qualSummaryCard(count, snap.data ?? 0),
-                      ),
                       _downlineChart(count),
                       _earningsCard(pending, total, withdrawn),
                       SizedBox(height: 20.h),
@@ -269,22 +237,20 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
               'รหัสแนะนำ',
               style: styles(
                 fontSize: 14.sp,
-                color: Colors.deepPurple.shade900,
+                color: context.isDark
+                    ? Colors.white
+                    : Colors.deepPurple.shade900,
                 fontWeight: FontWeight.w500,
               ),
             ),
             Spacer(),
+
             IconButton(
-              icon: Icon(Icons.copy, color: Colors.grey, size: 20.sp),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: code));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('คัดลอกลิงก์แล้ว')),
-                );
-              },
-            ),
-            IconButton(
-              icon: Icon(Icons.share, color: Colors.grey, size: 20.sp),
+              icon: Icon(
+                Icons.share,
+                color: context.isDark ? Colors.white : Colors.grey,
+                size: 20.sp,
+              ),
               onPressed: () => Share.share(
                 'สมัครเปิดร้านขายของกับ Colae ด้วยรหัสแนะนำ: $code',
               ),
@@ -308,7 +274,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
           style: styles(
             fontSize: 14.sp,
             fontWeight: FontWeight.w700,
-            color: Colors.black54,
+            color: context.isDark ? Colors.white : Colors.black54,
             letterSpacing: 2,
           ),
         ),
@@ -329,7 +295,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
             style: styles(
               fontSize: 14.sp,
               fontWeight: FontWeight.w500,
-              color: Colors.deepPurple[900],
+              color: context.isDark ? Colors.white : Colors.deepPurple[900],
             ),
           ),
           SizedBox(height: 12.h),
@@ -356,20 +322,25 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                             'รายได้เดือนนี้',
                             style: styles(
                               fontSize: 11.sp,
-                              color: Colors.grey[700],
+                              color: context.subColor,
                             ),
                           ),
                           Text(
                             '฿${monthAmount.toStringAsFixed(2)}',
-                            style: TextStyle(
+                            style: styles(
                               fontSize: 14.sp,
                               fontWeight: FontWeight.w700,
-                              color: Colors.green,
+                              color: context.isDark
+                                  ? Colors.indigo
+                                  : Colors.green,
                             ),
                           ),
                           Text(
                             'จ่ายวันที่ 5 ของเดือนถัดไป',
-                            style: styles(fontSize: 10.sp, color: Colors.grey),
+                            style: styles(
+                              fontSize: 10.sp,
+                              color: context.subColor,
+                            ),
                           ),
                         ],
                       ),
@@ -382,9 +353,21 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
 
           Row(
             children: [
-              _earningsItem('พร้อมถอน', pending, Colors.orange),
-              _earningsItem('ทั้งหมด', total, Colors.blue),
-              _earningsItem('ถอนแล้ว', withdrawn, Colors.green),
+              _earningsItem(
+                'พร้อมถอน',
+                pending,
+                context.isDark ? Colors.deepOrange : Colors.orange,
+              ),
+              _earningsItem(
+                'ทั้งหมด',
+                total,
+                context.isDark ? Colors.indigo : Colors.blue,
+              ),
+              _earningsItem(
+                'ถอนแล้ว',
+                withdrawn,
+                context.isDark ? Colors.green[800]! : Colors.green,
+              ),
             ],
           ),
           SizedBox(height: 16.h),
@@ -400,7 +383,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                   padding: EdgeInsets.all(12.w),
                   child: Text(
                     'Error: ${snap.error}',
-                    style: TextStyle(color: Colors.red, fontSize: 11.sp),
+                    style: styles(color: Colors.red, fontSize: 11.sp),
                   ),
                 );
               }
@@ -419,7 +402,10 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                   child: Center(
                     child: Text(
                       'ยังไม่มีรายการ',
-                      style: styles(color: Colors.grey, fontSize: 13.sp),
+                      style: styles(
+                        color: context.isDark ? Colors.white : Colors.grey,
+                        fontSize: 13.sp,
+                      ),
                     ),
                   ),
                 );
@@ -486,7 +472,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
           SizedBox(height: 4.h),
           Text(
             label,
-            style: styles(fontSize: 12.sp, color: Colors.grey[600]),
+            style: styles(fontSize: 12.sp, color: context.textColor),
           ),
         ],
       ),
@@ -568,7 +554,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                                 levels[i],
                                 style: styles(
                                   fontSize: 9.sp,
-                                  color: Colors.grey[700],
+                                  color: context.textColor,
                                 ),
                               ),
                             );
@@ -584,7 +570,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                             value.toInt().toString(),
                             style: styles(
                               fontSize: 9.sp,
-                              color: Colors.grey[600],
+                              color: context.subColor,
                             ),
                           ),
                         ),
@@ -695,7 +681,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                           'เดือนนี้',
                           style: styles(
                             fontSize: 12.sp,
-                            color: Colors.grey[600],
+                            color: context.subColor,
                           ),
                         ),
                         const Spacer(),
@@ -763,7 +749,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                   child: Center(
                     child: Text(
                       'ยังไม่มีรายการ',
-                      style: styles(color: Colors.grey, fontSize: 13.sp),
+                      style: styles(color: context.subColor, fontSize: 13.sp),
                     ),
                   ),
                 );
@@ -823,18 +809,14 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
               style: styles(
                 fontSize: 12.sp,
                 fontWeight: FontWeight.w400,
-                color: Colors.black87,
+                color: context.subColor,
               ),
             ),
           ),
           if (qualified)
             Padding(
               padding: EdgeInsets.only(right: 6.w),
-              child: Icon(
-                Icons.check_circle,
-                color: Colors.green,
-                size: 14.sp,
-              ),
+              child: Icon(Icons.check_circle, color: Colors.green, size: 14.sp),
             ),
           Text(
             '฿${totalSales.toStringAsFixed(2)}',
@@ -842,49 +824,6 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
               fontSize: 12.sp,
               fontWeight: FontWeight.w600,
               color: qualified ? Colors.green[700] : Colors.orange[700],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _qualSummaryCard(int count, double monthlyAmount) {
-    final cond1 = count >= 12;
-    final cond2 = monthlyAmount >= 5000;
-    final String message;
-    final Color color;
-    final IconData icon;
-    if (cond1 && cond2) {
-      message = 'เดือนนี้รับรายได้ MLM แล้ว!';
-      color = Colors.green;
-      icon = Icons.check_circle;
-    } else if (cond1 || cond2) {
-      final remaining = cond1
-          ? 'ยอดเงิน ≥ ฿5,000 เดือนนี้'
-          : 'แนะนำให้ครบ 12 คน';
-      message = 'ต้องผ่านอีก: $remaining';
-      color = Colors.orange;
-      icon = Icons.hourglass_empty;
-    } else {
-      message = 'ยังไม่ผ่านเงื่อนไขทั้ง 2 ข้อ';
-      color = Colors.red;
-      icon = Icons.info_outline;
-    }
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 22.sp),
-          SizedBox(width: 10.w),
-          Expanded(
-            child: Text(
-              message,
-              style: styles(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
             ),
           ),
         ],
@@ -935,13 +874,13 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                   style: styles(
                     fontSize: 12.sp,
                     fontWeight: FontWeight.w400,
-                    color: Colors.black87,
+                    color: context.textColor,
                   ),
                 ),
                 SizedBox(height: 2.h),
                 Text(
                   '$count รายการ',
-                  style: styles(fontSize: 11.sp, color: Colors.grey[600]),
+                  style: styles(fontSize: 11.sp, color: context.subColor),
                 ),
               ],
             ),
