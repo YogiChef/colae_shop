@@ -239,6 +239,60 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // === Service Shops (vendor manages own shop) ===
+    match /service_shops/{shopId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == shopId;
+
+      match /providers/{providerId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == shopId;
+      }
+
+      match /custom_types/{typeId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == shopId;
+      }
+    }
+
+    // === Provider (custom token, role='provider') ===
+    function isProvider() {
+      return request.auth != null && request.auth.token.get('role', '') == 'provider';
+    }
+
+    function providerShopId() {
+      return request.auth.token.shopId;
+    }
+
+    function providerProviderId() {
+      return request.auth.token.providerId;
+    }
+
+    // Providers can read their own shop info
+    match /service_shops/{shopId} {
+      allow read: if isProvider() && providerShopId() == shopId;
+    }
+
+    // Providers can read their own profile
+    match /service_shops/{shopId}/providers/{providerId} {
+      allow read: if isProvider()
+                  && providerShopId() == shopId
+                  && providerProviderId() == providerId;
+    }
+
+    // Providers can read bookings assigned to them and update status fields
+    match /service_bookings/{bookingId} {
+      allow read: if isProvider()
+                  && resource.data.shopId == providerShopId()
+                  && resource.data.providerId == providerProviderId();
+
+      allow update: if isProvider()
+                    && resource.data.shopId == providerShopId()
+                    && resource.data.providerId == providerProviderId()
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['status', 'updatedAt', 'startedAt', 'completedAt']);
+    }
+
     // === Safety net ===
     match /{allPaths=**} {
       allow read, write: if isSignedIn();

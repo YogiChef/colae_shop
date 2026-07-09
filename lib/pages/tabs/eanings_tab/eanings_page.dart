@@ -6,6 +6,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colae_shop/auth/landing_page.dart';
 import 'package:colae_shop/pages/hotel/hotel_main_page.dart';
+import 'package:colae_shop/pages/services/service_shop_dashboard.dart';
+import 'package:colae_shop/pages/services/vendor_service_home_page.dart';
 import 'package:colae_shop/widgets/mode_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -65,7 +67,7 @@ class _EarningPageState extends State<EarningPage> {
     final prefs = await SharedPreferences.getInstance();
     final lastMode = prefs.getString('vendor_last_mode');
     if (lastMode != null && mounted) {
-      _navigateToMode(lastMode);
+      await _navigateToMode(lastMode);
       return;
     }
   }
@@ -79,12 +81,58 @@ class _EarningPageState extends State<EarningPage> {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('vendor_last_mode', mode);
-    _navigateToMode(mode);
+    await _navigateToMode(mode);
   }
 
-  void _navigateToMode(String mode) {
+  Future<void> _navigateToMode(String mode) async {
     if (mode == 'hotel') {
       Get.offAll(() => const HotelMainPage());
+    } else if (mode == 'services') {
+      // Query shop before navigating — bypass VendorServiceHomePage for active shops.
+      // Navigator.push preserves the stack so back() returns to EarningPage.
+      try {
+        final uid = auth.currentUser!.uid;
+        final doc = await FirebaseFirestore.instance
+            .collection('service_shops')
+            .doc(uid)
+            .get();
+        if (!mounted) return;
+
+        if (doc.exists && doc.data()?['status'] == 'active') {
+          final data = doc.data()!;
+          String? catName;
+          final catId = data['categoryId'] as String?;
+          if (catId != null) {
+            final catDoc = await FirebaseFirestore.instance
+                .collection('service_categories')
+                .doc(catId)
+                .get();
+            if (catDoc.exists) catName = catDoc.data()?['name'] as String?;
+          }
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ServiceShopDashboard(
+                shopData: data,
+                categoryName: catName,
+              ),
+            ),
+          );
+        } else {
+          // No shop / pending / suspended — VendorServiceHomePage handles those states.
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VendorServiceHomePage()),
+          );
+        }
+      } catch (_) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const VendorServiceHomePage()),
+        );
+      }
     } else {
       Get.offAll(() => const LandingPage());
     }
@@ -343,9 +391,23 @@ class _EarningPageState extends State<EarningPage> {
                         },
                       ),
                       SizedBox(height: 12.h),
+                      ModeCard(
+                        image: Image.asset(
+                          'images/services.png',
+                          width: 90.w,
+                          height: 90.w,
+                          fit: BoxFit.contain,
+                        ),
+                        color: mainColor,
+                        title: 'บริการ',
+                        subtitle: 'นวด ตัดผม ช่าง ครูสอนพิเศษ',
+                        enabled: true,
+                        onTap: () => _selectMode('services'),
+                      ),
+                      SizedBox(height: 12.h),
                       Card(
                         margin: EdgeInsets.zero,
-                        color: Colors.indigo,
+                        color: const Color(0xFFFF6B9D),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(7.r),
                         ),

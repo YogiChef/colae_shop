@@ -48,6 +48,8 @@ Future<void> _saveFcmToken() async {
       });
       return;
     }
+    // Skip FCM for provider accounts (custom token UIDs start with 'provider_')
+    if (uid.startsWith('provider_')) return;
     final token = await FirebaseMessaging.instance.getToken();
     if (token == null) return;
     await FirebaseFirestore.instance.collection('vendors').doc(uid).update({
@@ -62,7 +64,7 @@ Future<void> _saveFcmToken() async {
 Future<void> _updateFcmToken(String newToken) async {
   try {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null || uid.startsWith('provider_')) return;
     await FirebaseFirestore.instance.collection('vendors').doc(uid).update({
       'fcmToken': newToken,
     });
@@ -95,13 +97,16 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('th', null);
   try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on FirebaseException catch (e) {
+    if (e.code == 'duplicate-app') {
+      // Already initialized (native auto-init) — safe to ignore
+      debugPrint('[main] Firebase already initialized — skip');
+    } else {
+      rethrow;
     }
-  } catch (e) {
-    print("Firebase init error: ${e.toString()}");
   }
 
   FlutterError.onError = (FlutterErrorDetails details) {};

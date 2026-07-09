@@ -37,9 +37,8 @@ class ModeCard extends StatelessWidget {
           right: 20.w,
         ),
         decoration: BoxDecoration(
-          color: mainColor,
+          color: color,
           borderRadius: BorderRadius.circular(7.r),
-          border: Border.all(color: enabled ? mainColor : color, width: 2),
           boxShadow: enabled
               ? [
                   BoxShadow(

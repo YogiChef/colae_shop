@@ -17,7 +17,6 @@ class NotificationService {
     if (Platform.isAndroid) {
       final plugin = _localNotif
           .resolvePlatformSpecificImplementation<
-            // ← ต้องมี
             AndroidFlutterLocalNotificationsPlugin
           >();
 
@@ -41,7 +40,6 @@ class NotificationService {
           description: 'แจ้งเตือนความคืบหน้าของออร์เดอร์',
           importance: Importance.max,
           playSound: true,
-          sound: RawResourceAndroidNotificationSound('order_ready'),
           enableVibration: true,
           showBadge: true,
         ),
@@ -81,9 +79,9 @@ class NotificationService {
         ? 'new_order_channel'
         : 'order_status_channel';
     final String channelName = isNewOrder ? 'ออร์เดอร์ใหม่' : 'สถานะออร์เดอร์';
-    final sound = isNewOrder
+    final AndroidNotificationSound? sound = isNewOrder
         ? const RawResourceAndroidNotificationSound('new_order_sound')
-        : const RawResourceAndroidNotificationSound('order_ready');
+        : null;
 
     if (Platform.isAndroid) {
       await _localNotif.show(

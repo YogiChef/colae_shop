@@ -13,6 +13,13 @@ admin.initializeApp();
 const { setGlobalOptions } = require("firebase-functions/v2");
 setGlobalOptions({ maxInstances: 10, region: 'asia-southeast1' });
 
+// ─── CONFIG CACHE (5-min TTL) ─────────────────────────────────────────────────
+// อ่าน admin_config จาก Firestore ครั้งเดียวต่อ instance แล้ว cache ไว้
+// ทำให้ admin เปลี่ยน rate ใน Firestore โดยไม่ต้อง redeploy
+let _configCache = null;
+let _configCachedAt = 0;
+const CONFIG_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 exports.calculateVendorFee = onCall(async (request) => {
     const totalSales = request.data.totalSales || 0;
     const accumulatedCommission = request.data.accumulatedCommission || 0;
@@ -113,6 +120,227 @@ exports.notifyVendorNewOrder = onDocumentCreated("orders/{orderId}", async (even
         console.error(`[ERROR-VENDOR] ${e.message}`);
     }
 });
+
+// ─── HELPER ────────────────────────────────────────────────────────────────────
+
+function formatThaiDate(date) {
+  if (!date) return '-';
+  const thMonth = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const d = date.getDate();
+  const m = thMonth[date.getMonth()];
+  const y = date.getFullYear() + 543;
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${d} ${m} ${y} ${h}:${min}`;
+}
+
+// ─── SERVICE BOOKING NOTIFICATIONS ────────────────────────────────────────────
+
+exports.notifyVendorNewServiceBooking = onDocumentCreated(
+  {
+    document: 'service_bookings/{bookingId}',
+    region: 'asia-southeast1',
+  },
+  async (event) => {
+    const booking = event.data.data();
+    if (!booking) return;
+
+    const vendorId = booking.shopId;
+    if (!vendorId) return;
+
+    const vendorSnap = await admin.firestore().collection('vendors').doc(vendorId).get();
+    const fcmToken = vendorSnap.data()?.fcmToken;
+
+    if (!fcmToken) {
+      console.log('[SERVICE-NOTIFY] Vendor has no FCM token:', vendorId);
+      return;
+    }
+
+    const bookingDate = booking.bookingDate?.toDate();
+    const dateStr = formatThaiDate(bookingDate);
+
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: '🛎️ มีการจองบริการใหม่!',
+        body: `${booking.customerName} จอง ${booking.serviceName}\n${dateStr}`,
+      },
+      data: {
+        type: 'new_service_booking',
+        bookingId: event.params.bookingId,
+        shopId: vendorId,
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'new_order_channel',
+          sound: 'new_order_sound',
+        },
+      },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      console.log('[SERVICE-NOTIFY] Notified vendor:', vendorId);
+    } catch (e) {
+      console.error('[SERVICE-NOTIFY] FCM send error:', e.message);
+    }
+  }
+);
+
+exports.notifyServiceBookingStatusUpdate = onDocumentUpdated(
+  {
+    document: 'service_bookings/{bookingId}',
+    region: 'asia-southeast1',
+  },
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    if (before.status === after.status) return;
+
+    // Skip notification for walk-in bookings (no customer app account)
+    if (after.isWalkIn === true) return;
+
+    const customerId = after.customerId;
+    const vendorId = after.shopId;
+    const newStatus = after.status;
+
+    let recipient = null;
+    let title = '';
+    let body = '';
+
+    if (newStatus === 'confirmed') {
+      recipient = 'customer';
+      title = '✅ ร้านยืนยันการจอง';
+      body = `${after.shopName} ยืนยัน ${after.serviceName} ของคุณ`;
+    } else if (newStatus === 'rejected') {
+      recipient = 'customer';
+      title = '❌ การจองถูกปฏิเสธ';
+      body = `${after.shopName} ไม่สะดวก${after.cancelReason ? ': ' + after.cancelReason : ''}`;
+    } else if (newStatus === 'in_service') {
+      recipient = 'customer';
+      title = '🛎️ เริ่มบริการแล้ว';
+      body = `${after.shopName} เริ่มให้บริการ ${after.serviceName}`;
+    } else if (newStatus === 'completed') {
+      recipient = 'customer';
+      title = '🌟 บริการเสร็จแล้ว';
+      body = `กรุณาให้คะแนน ${after.shopName} เพื่อช่วยลูกค้าคนอื่น`;
+    } else if (newStatus === 'cancelled') {
+      recipient = 'vendor';
+      title = '🚫 ลูกค้ายกเลิกการจอง';
+      body = `${after.customerName} ยกเลิก ${after.serviceName}`;
+    } else {
+      return;
+    }
+
+    const recipientId = recipient === 'customer' ? customerId : vendorId;
+    const collection = recipient === 'customer' ? 'buyers' : 'vendors';
+
+    const userSnap = await admin.firestore().collection(collection).doc(recipientId).get();
+    const fcmToken = userSnap.data()?.fcmToken;
+
+    if (!fcmToken) {
+      console.log(`[SERVICE-STATUS] No FCM token for ${recipient}:`, recipientId);
+      return;
+    }
+
+    const message = {
+      token: fcmToken,
+      notification: { title, body },
+      data: {
+        type: `service_booking_${newStatus}`,
+        bookingId: event.params.bookingId,
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: recipient === 'customer' ? 'order_status_channel' : 'new_order_channel',
+          sound: 'order_ready',
+        },
+      },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      console.log(`[SERVICE-STATUS] Notified ${recipient} (${recipientId}):`, newStatus);
+    } catch (e) {
+      console.error('[SERVICE-STATUS] FCM send error:', e.message);
+    }
+  }
+);
+
+exports.notifyServiceBookingReminder = onSchedule(
+  {
+    schedule: 'every 15 minutes',
+    timeZone: 'Asia/Bangkok',
+    region: 'asia-southeast1',
+  },
+  async (event) => {
+    const db = admin.firestore();
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+    const oneHourFifteenLater = new Date(now.getTime() + 75 * 60 * 1000);
+
+    const snap = await db.collection('service_bookings')
+      .where('status', '==', 'confirmed')
+      .where('bookingDate', '>=', admin.firestore.Timestamp.fromDate(oneHourLater))
+      .where('bookingDate', '<', admin.firestore.Timestamp.fromDate(oneHourFifteenLater))
+      .get();
+
+    for (const doc of snap.docs) {
+      const booking = doc.data();
+      if (booking.reminderSent === true) continue;
+
+      const customerSnap = await db.collection('buyers').doc(booking.customerId).get();
+      const vendorSnap = await db.collection('vendors').doc(booking.shopId).get();
+
+      const customerToken = customerSnap.data()?.fcmToken;
+      const vendorToken = vendorSnap.data()?.fcmToken;
+
+      const promises = [];
+
+      if (customerToken) {
+        promises.push(admin.messaging().send({
+          token: customerToken,
+          notification: {
+            title: '⏰ ใกล้ถึงเวลานัด',
+            body: `อีก 1 ชม. จะถึงเวลานัด ${booking.serviceName}`,
+          },
+          data: { type: 'service_reminder', bookingId: doc.id },
+          android: {
+            priority: 'high',
+            notification: { channelId: 'order_status_channel', sound: 'order_ready' },
+          },
+        }));
+      }
+
+      if (vendorToken) {
+        promises.push(admin.messaging().send({
+          token: vendorToken,
+          notification: {
+            title: '⏰ ใกล้ถึงเวลานัด',
+            body: `อีก 1 ชม. จะถึงนัดของ ${booking.customerName} (${booking.serviceName})`,
+          },
+          data: { type: 'service_reminder', bookingId: doc.id },
+          android: {
+            priority: 'high',
+            notification: { channelId: 'new_order_channel', sound: 'new_order_sound' },
+          },
+        }));
+      }
+
+      promises.push(doc.ref.update({ reminderSent: true }));
+
+      try {
+        await Promise.all(promises);
+        console.log('[SERVICE-REMINDER] Sent reminder for booking:', doc.id);
+      } catch (e) {
+        console.error('[SERVICE-REMINDER] Error for booking:', doc.id, e.message);
+      }
+    }
+  }
+);
 
 exports.notifyRiderNewOrder = onDocumentUpdated("orders/{orderId}", async (event) => {
     const newData = event.data.after.data();
@@ -397,127 +625,224 @@ async function generateUniqueReferralCode() {
   return code;
 }
 
+// ─── CONFIG LOADER ────────────────────────────────────────────────────────────
+
+async function getConfig(db) {
+  const now = Date.now();
+  if (_configCache && (now - _configCachedAt) < CONFIG_TTL_MS) return _configCache;
+
+  const [platformDoc, mlmDoc] = await Promise.all([
+    db.collection('admin_config').doc('platform_rates').get(),
+    db.collection('admin_config').doc('mlm_level_rates').get(),
+  ]);
+
+  _configCache = {
+    platformRates: platformDoc.data() ?? {},
+    mlmLevels: (mlmDoc.data()?.levels) ?? [0.20, 0.10, 0.05, 0.03, 0.02],
+  };
+  _configCachedAt = now;
+  logger.info('[CONFIG] cache refreshed');
+  return _configCache;
+}
+
+// ─── GENERIC MLM COMMISSION ───────────────────────────────────────────────────
+/**
+ * คำนวณและบันทึก referral_transactions สำหรับทุก mode (delivery/hotel/services/vehicle)
+ *
+ * Pool calculation: baseAmount × mode.rate × mode.mlmPoolRatio
+ *   เช่น delivery: 1000 × 0.15 × 0.40 = 60 บาท (admin เปลี่ยนได้ใน Firestore)
+ *
+ * @param {object} p
+ * @param {'delivery'|'hotel'|'services'|'vehicle'} p.source
+ * @param {string}  p.fromUserId  – buyer/guest UID
+ * @param {string}  p.refId       – orderId / bookingId
+ * @param {string}  p.refField    – ชื่อ field ใน transaction doc (เช่น 'orderId', 'bookingId')
+ * @param {number}  p.baseAmount  – ยอดเงิน base สำหรับคำนวณ pool
+ * @param {object}  [p.extraFields] – fields เพิ่มเติมที่ต้องการบันทึกในแต่ละ transaction
+ * @param {admin.firestore.Firestore} p.db
+ * @returns {Promise<{ pool: number, txCount: number }>}
+ */
+async function calculateMlmCommission({ source, fromUserId, refId, refField, baseAmount, extraFields = {}, db }) {
+  const config = await getConfig(db);
+  const modeConfig = config.platformRates[source] ?? {};
+  const rate       = Number(modeConfig.rate         ?? 0.15);
+  const poolRatio  = Number(modeConfig.mlmPoolRatio ?? 0.40);
+  const levelRates = config.mlmLevels;
+
+  // pool = platform fee share ที่แบ่งให้ MLM network
+  const pool = parseFloat((baseAmount * rate * poolRatio).toFixed(2));
+  if (pool <= 0) return { pool: 0, txCount: 0 };
+
+  const userFound = await getUserDoc(fromUserId);
+  if (!userFound) return { pool, txCount: 0 };
+
+  const uplineIds = userFound.doc.data()?.uplineIds ?? [];
+  if (uplineIds.length === 0) return { pool, txCount: 0 };
+
+  const month = new Date().toISOString().slice(0, 7);
+  const batch = db.batch();
+  const count = Math.min(uplineIds.length, levelRates.length);
+
+  for (let i = 0; i < count; i++) {
+    const commission = parseFloat((pool * levelRates[i]).toFixed(2));
+    const txRef = db.collection('referral_transactions').doc();
+    batch.set(txRef, {
+      source,
+      fromBuyerId: fromUserId,
+      toUserId: uplineIds[i],
+      [refField]: refId,
+      level: i + 1,
+      baseAmount,
+      pool,
+      commissionRate: levelRates[i],
+      amount: commission,
+      month,
+      status: 'pending_payout',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ...extraFields,
+    });
+  }
+
+  await batch.commit();
+  return { pool, txCount: count };
+}
+
+// ─── DELIVERY: referral commission ────────────────────────────────────────────
+
 exports.processReferralCommission = onDocumentUpdated("orders/{orderId}", async (event) => {
   const before = event.data.before.data();
-  const after = event.data.after.data();
+  const after  = event.data.after.data();
 
   if (before?.status === after?.status) return;
   if (after?.status !== 'delivered') return;
 
-  const db = admin.firestore();
+  const db      = admin.firestore();
   const orderId = event.params.orderId;
   const buyerId = after.buyerId;
   if (!buyerId) return;
 
   const shippingCharge = Number(after.shippingCharge ?? 0);
-  const shippingFee = Number(after.shippingFee ?? 0);  // ecommerce ใช้ field นี้
-  const totalPrice = Number(after.totalPrice ?? 0);
-  const foodTotal = totalPrice - shippingCharge - shippingFee;
+  const shippingFee    = Number(after.shippingFee    ?? 0); // ecommerce field
+  const totalPrice     = Number(after.totalPrice     ?? 0);
+  const foodTotal      = totalPrice - shippingCharge - shippingFee;
   if (foodTotal <= 0) return;
 
-  const pool = parseFloat((foodTotal * 0.02).toFixed(2));
-  const rates = [0.20, 0.10, 0.05, 0.03, 0.02];
+  const { pool, txCount } = await calculateMlmCommission({
+    source: 'delivery',
+    fromUserId: buyerId,
+    refId: orderId,
+    refField: 'orderId',
+    baseAmount: foodTotal,
+    extraFields: { foodTotal },
+    db,
+  });
 
-  const buyerFound = await getUserDoc(buyerId);
-  if (!buyerFound) return;
-  const uplineIds = buyerFound.doc.data()?.uplineIds ?? [];
-  if (uplineIds.length === 0) return;
-
-  const batch = db.batch();
-  const month = new Date().toISOString().slice(0, 7);
-
-  for (let i = 0; i < Math.min(uplineIds.length, 5); i++) {
-    const uplineId = uplineIds[i];
-    const commission = parseFloat((pool * rates[i]).toFixed(2));
-
-    // บันทึก transaction เก็บไว้ ยังไม่ update earnings
-    const txRef = db.collection('referral_transactions').doc();
-    batch.set(txRef, {
-      source: 'delivery',
-      fromBuyerId: buyerId,
-      toUserId: uplineId,
-      orderId: orderId,
-      level: i + 1,
-      foodTotal: foodTotal,
-      pool: pool,
-      commissionRate: rates[i],
-      amount: commission,
-      month: month,
-      status: 'pending_payout',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
-
-  await batch.commit();
-  logger.info(`[REFERRAL] ✅ orderId=${orderId} pool=${pool} uplines=${uplineIds.length}`);
+  logger.info(`[REFERRAL] ✅ orderId=${orderId} pool=${pool} uplines=${txCount}`);
 });
+
+// ─── HOTEL: referral commission ───────────────────────────────────────────────
 
 exports.processHotelReferralCommission = onDocumentUpdated("hotel_bookings/{bookingId}", async (event) => {
   const before = event.data.before.data();
-  const after = event.data.after.data();
+  const after  = event.data.after.data();
 
   if (before?.status === after?.status) return;
   if (after?.status !== 'completed') return;
 
-  const db = admin.firestore();
+  const db        = admin.firestore();
   const bookingId = event.params.bookingId;
-  const guestId = after.guestId;
+  const guestId   = after.guestId;
   if (!guestId) return;
 
-  const totalPrice = Number(after.totalPrice ?? 0);
-  const refundAmount = Number(after.refundAmount ?? 0);
+  const totalPrice      = Number(after.totalPrice    ?? 0);
+  const refundAmount    = Number(after.refundAmount  ?? 0);
   const effectiveAmount = totalPrice - refundAmount;
-  if (effectiveAmount <= 0) return;  // คืนเงินเต็ม = ไม่คิด MLM
+  if (effectiveAmount <= 0) return; // คืนเงินเต็ม = ไม่คิด MLM
 
-  const pool = parseFloat((effectiveAmount * 0.02).toFixed(2));
-  const rates = [0.20, 0.10, 0.05, 0.03, 0.02];
+  const { pool, txCount } = await calculateMlmCommission({
+    source: 'hotel',
+    fromUserId: guestId,
+    refId: bookingId,
+    refField: 'bookingId',
+    baseAmount: effectiveAmount,
+    extraFields: { totalPrice, effectiveAmount, refundAmount },
+    db,
+  });
 
-  const guestFound = await getUserDoc(guestId);
-  if (!guestFound) return;
-  const uplineIds = guestFound.doc.data()?.uplineIds ?? [];
-  if (uplineIds.length === 0) return;
-
-  const batch = db.batch();
+  // update buyers totalSpent + monthly_spending (hotel-specific)
   const month = new Date().toISOString().slice(0, 7);
-
-  for (let i = 0; i < Math.min(uplineIds.length, 5); i++) {
-    const uplineId = uplineIds[i];
-    const commission = parseFloat((pool * rates[i]).toFixed(2));
-
-    const txRef = db.collection('referral_transactions').doc();
-    batch.set(txRef, {
-      source: 'hotel',
-      fromBuyerId: guestId,
-      toUserId: uplineId,
-      bookingId: bookingId,
-      level: i + 1,
-      totalPrice: totalPrice,
-      effectiveAmount: effectiveAmount,
-      refundAmount: refundAmount,
-      pool: pool,
-      commissionRate: rates[i],
-      amount: commission,
-      month: month,
-      status: 'pending_payout',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
-
-  // update buyers totalSpent + monthly_spending
   await db.collection('buyers').doc(guestId).update({
     totalSpent: admin.firestore.FieldValue.increment(effectiveAmount),
   });
-
   await db.collection('buyers').doc(guestId)
       .collection('monthly_spending').doc(month)
       .set({
         total: admin.firestore.FieldValue.increment(effectiveAmount),
-        month: month,
+        month,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-  await batch.commit();
-  logger.info(`[HOTEL-REFERRAL] ✅ bookingId=${bookingId} pool=${pool} uplines=${uplineIds.length}`);
+  logger.info(`[HOTEL-REFERRAL] ✅ bookingId=${bookingId} pool=${pool} uplines=${txCount}`);
+});
+
+// ─── SERVICES: referral commission ────────────────────────────────────────────
+
+exports.onServiceBookingComplete = onDocumentUpdated("service_bookings/{bookingId}", async (event) => {
+  const before = event.data.before.data();
+  const after  = event.data.after.data();
+
+  if (before?.status === after?.status) return;
+  if (after?.status !== 'completed') return;
+
+  // Skip MLM for walk-in bookings (no customer referral chain)
+  if (after.isWalkIn === true) {
+    logger.info(`[SERVICE-REFERRAL] Skip walk-in booking: ${event.params.bookingId}`);
+    return;
+  }
+
+  const db        = admin.firestore();
+  const bookingId = event.params.bookingId;
+  const buyerId   = after.buyerId ?? after.guestId ?? after.customerId;
+  if (!buyerId) {
+    logger.info(`[SERVICE-REFERRAL] Skip booking without customerId: ${bookingId}`);
+    return;
+  }
+
+  const totalPrice = Number(after.totalPrice ?? 0);
+  if (totalPrice <= 0) return;
+
+  const { pool, txCount } = await calculateMlmCommission({
+    source: 'services',
+    fromUserId: buyerId,
+    refId: bookingId,
+    refField: 'bookingId',
+    baseAmount: totalPrice,
+    extraFields: {
+      totalPrice,
+      serviceTypeId: after.serviceTypeId ?? '',
+      vendorId: after.vendorId ?? '',
+    },
+    db,
+  });
+
+  // update buyer totalSpent + monthly_spending
+  const month = new Date().toISOString().slice(0, 7);
+  try {
+    await db.collection('buyers').doc(buyerId).update({
+      totalSpent: admin.firestore.FieldValue.increment(totalPrice),
+    });
+    await db.collection('buyers').doc(buyerId)
+        .collection('monthly_spending').doc(month)
+        .set({
+          total: admin.firestore.FieldValue.increment(totalPrice),
+          month,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+  } catch (e) {
+    logger.warn(`[SERVICE-REFERRAL] totalSpent update skipped for ${buyerId}: ${e.message}`);
+  }
+
+  logger.info(`[SERVICE-REFERRAL] ✅ bookingId=${bookingId} pool=${pool} uplines=${txCount}`);
 });
 
 exports.monthlyReferralPayout = onSchedule({
@@ -1110,3 +1435,461 @@ exports.onWithdrawalCompleted = onDocumentUpdated({
 
   logger.info(`[WITHDRAWAL-COMPLETE] ✅ deleted ${deletedCount} txs sum=${deletedSum.toFixed(2)} for ${userId}`);
 });
+
+// ─── Provider Management ───────────────────────────────────────────────────────
+
+const bcrypt = require('bcryptjs');
+
+exports.createProvider = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Login required');
+
+    const { shopId, name, username, password, specialties, isSpecialistOnly, photo } = request.data;
+
+    if (!shopId || !name || !username || !password) {
+      throw new HttpsError('invalid-argument', 'Missing required fields');
+    }
+    if (password.length < 6) {
+      throw new HttpsError('invalid-argument', 'Password must be at least 6 characters');
+    }
+
+    const db = admin.firestore();
+
+    // ตรวจว่าเป็น owner
+    const shopSnap = await db.collection('service_shops').doc(shopId).get();
+    if (!shopSnap.exists) throw new HttpsError('not-found', 'Shop not found');
+    if (shopSnap.data().ownerId !== uid) {
+      throw new HttpsError('permission-denied', 'Not shop owner');
+    }
+
+    // ตรวจ username unique per shop
+    const existingSnap = await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers')
+      .where('username', '==', username)
+      .get();
+    if (!existingSnap.empty) {
+      throw new HttpsError('already-exists', 'Username already taken in this shop');
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Auto-order
+    const providersSnap = await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers')
+      .orderBy('order', 'desc')
+      .limit(1)
+      .get();
+    const nextOrder = providersSnap.empty ? 0 : (providersSnap.docs[0].data().order + 1);
+
+    const providerData = {
+      name,
+      username,
+      passwordHash,
+      photo: photo || null,
+      specialties: specialties || [],
+      isSpecialistOnly: isSpecialistOnly || false,
+      active: true,
+      status: 'available',
+      order: nextOrder,
+      firebaseUid: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const docRef = await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers')
+      .add(providerData);
+
+    logger.info(`[PROVIDER] created ${docRef.id} for shop ${shopId}`);
+    return { providerId: docRef.id, success: true };
+  }
+);
+
+exports.updateProviderPassword = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Login required');
+
+    const { shopId, providerId, newPassword } = request.data;
+
+    if (!shopId || !providerId || !newPassword) {
+      throw new HttpsError('invalid-argument', 'Missing required fields');
+    }
+    if (newPassword.length < 6) {
+      throw new HttpsError('invalid-argument', 'Password must be at least 6 characters');
+    }
+
+    const db = admin.firestore();
+
+    // ตรวจว่าเป็น owner
+    const shopSnap = await db.collection('service_shops').doc(shopId).get();
+    if (!shopSnap.exists) throw new HttpsError('not-found', 'Shop not found');
+    if (shopSnap.data().ownerId !== uid) {
+      throw new HttpsError('permission-denied', 'Not shop owner');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers').doc(providerId)
+      .update({
+        passwordHash,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+    logger.info(`[PROVIDER] password updated for ${providerId}`);
+    return { success: true };
+  }
+);
+
+exports.deleteProvider = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Login required');
+
+    const { shopId, providerId } = request.data;
+
+    if (!shopId || !providerId) {
+      throw new HttpsError('invalid-argument', 'Missing required fields');
+    }
+
+    const db = admin.firestore();
+
+    // ตรวจว่าเป็น owner
+    const shopSnap = await db.collection('service_shops').doc(shopId).get();
+    if (!shopSnap.exists) throw new HttpsError('not-found', 'Shop not found');
+    if (shopSnap.data().ownerId !== uid) {
+      throw new HttpsError('permission-denied', 'Not shop owner');
+    }
+
+    // ตรวจว่ามี active bookings ไหม
+    const activeBookings = await db.collection('service_bookings')
+      .where('providerId', '==', providerId)
+      .where('status', 'in', ['pending', 'confirmed', 'in_service'])
+      .limit(1)
+      .get();
+
+    if (!activeBookings.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'ไม่สามารถลบพนักงานที่มีการจองที่ยังดำเนินการอยู่'
+      );
+    }
+
+    await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers').doc(providerId)
+      .delete();
+
+    logger.info(`[PROVIDER] deleted ${providerId} from shop ${shopId}`);
+    return { success: true };
+  }
+);
+
+// ─── PHASE 3: PROVIDER LOGIN ───────────────────────────────────────────────────
+
+/**
+ * Part A — ensureShopCode
+ * Auto-generate a 6-digit numeric shopCode when a service_shops doc is created
+ * or when it lacks the shopCode field.
+ */
+exports.ensureShopCode = onDocumentWritten(
+  { document: 'service_shops/{shopId}', region: 'asia-southeast1' },
+  async (event) => {
+    const after = event.data?.after;
+    if (!after || !after.exists) return; // doc deleted
+
+    const data = after.data();
+    if (data.shopCode) return; // already has code
+
+    // Generate unique 6-digit code
+    const db = admin.firestore();
+    let code;
+    let attempts = 0;
+    do {
+      code = String(Math.floor(100000 + Math.random() * 900000));
+      const existing = await db.collection('service_shops')
+        .where('shopCode', '==', code).limit(1).get();
+      if (existing.empty) break;
+      attempts++;
+    } while (attempts < 10);
+
+    await after.ref.update({ shopCode: code });
+    logger.info(`[SHOP_CODE] assigned ${code} to shop ${event.params.shopId}`);
+  }
+);
+
+/**
+ * Part B — verifyProviderLogin
+ * Verify shopCode + username + password, return Firebase custom token.
+ */
+exports.verifyProviderLogin = onCall(
+  { region: 'asia-southeast1' },
+  async (request) => {
+    const { shopCode, username, password } = request.data;
+
+    if (!shopCode || !username || !password) {
+      throw new HttpsError('invalid-argument', 'ต้องระบุ shopCode, username, และ password');
+    }
+
+    const db = admin.firestore();
+
+    // Find the shop by shopCode
+    const shopSnap = await db.collection('service_shops')
+      .where('shopCode', '==', shopCode.trim())
+      .limit(1)
+      .get();
+
+    if (shopSnap.empty) {
+      throw new HttpsError('not-found', 'ไม่พบร้านค้า — กรุณาตรวจสอบรหัสร้าน');
+    }
+
+    const shopDoc = shopSnap.docs[0];
+    const shopId = shopDoc.id;
+
+    // Find the provider by username within this shop
+    const providerSnap = await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers')
+      .where('username', '==', username.trim().toLowerCase())
+      .limit(1)
+      .get();
+
+    if (providerSnap.empty) {
+      throw new HttpsError('not-found', 'ไม่พบชื่อผู้ใช้งาน');
+    }
+
+    const providerDoc = providerSnap.docs[0];
+    const provider = providerDoc.data();
+
+    if (!provider.isActive) {
+      throw new HttpsError('permission-denied', 'บัญชีนี้ถูกระงับการใช้งาน');
+    }
+
+    // Verify password
+    const bcrypt = require('bcryptjs');
+    const match = await bcrypt.compare(password, provider.passwordHash);
+    if (!match) {
+      throw new HttpsError('unauthenticated', 'รหัสผ่านไม่ถูกต้อง');
+    }
+
+    // Create a custom token with provider claims
+    const providerId = providerDoc.id;
+    const uid = `provider_${shopId}_${providerId}`;
+
+    const customToken = await admin.auth().createCustomToken(uid, {
+      role: 'provider',
+      shopId: shopId,
+      providerId: providerId,
+    });
+
+    logger.info(`[PROVIDER_LOGIN] ${username} logged in shop ${shopId}`);
+
+    return {
+      customToken,
+      providerId,
+      shopId,
+      providerName: provider.name,
+      shopName: shopDoc.data().shopName ?? '',
+    };
+  }
+);
+
+// ─── Phase C: Auto-Assign Provider (Round-Robin Queue) ────────────────────────
+
+/**
+ * formatDateKey — returns 'YYYY-MM-DD' in Asia/Bangkok timezone.
+ * Uses en-CA locale (ISO date format) with timezone option.
+ */
+function formatDateKey(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * assignProviderToBooking
+ * Triggered on every new service_booking doc.
+ * Skips if providerId is already set (customer/vendor manual choice).
+ * Assigns an eligible, free provider via round-robin using queue_state per day.
+ */
+exports.assignProviderToBooking = onDocumentCreated(
+  {
+    document: 'service_bookings/{bookingId}',
+    region: 'asia-southeast1',
+  },
+  async (event) => {
+    const bookingId = event.params.bookingId;
+    const booking = event.data?.data();
+    if (!booking) return;
+
+    // Skip if customer/vendor already chose a provider manually
+    if (booking.providerId) {
+      logger.info(`[ASSIGN] ${bookingId} — skip (manual: ${booking.providerId})`);
+      return;
+    }
+
+    const shopId = booking.shopId;
+    const typeId = booking.typeId;
+    const bookingDate = booking.bookingDate?.toDate();
+    const bookingEndAt = booking.bookingEndAt?.toDate();
+
+    if (!shopId || !bookingDate || !bookingEndAt) {
+      logger.warn(`[ASSIGN] ${bookingId} — missing required fields, skip`);
+      return;
+    }
+
+    const db = admin.firestore();
+    const FieldValue = admin.firestore.FieldValue;
+
+    // 1. Load all active providers ordered by 'order' field
+    const providersSnap = await db
+      .collection('service_shops').doc(shopId)
+      .collection('providers')
+      .where('active', '==', true)
+      .orderBy('order')
+      .get();
+
+    const providers = providersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    if (providers.length === 0) {
+      logger.info(`[ASSIGN] ${bookingId} — no providers in shop ${shopId}, skip`);
+      return;
+    }
+
+    // 2. Filter eligible (specialties empty = can do any service type)
+    // typeId empty/null = service has no type restriction → all providers eligible
+    const eligible = providers.filter(p => {
+      const specs = p.specialties || [];
+      if (specs.length === 0) return true;
+      if (!typeId) return true;
+      return specs.includes(typeId);
+    });
+
+    if (eligible.length === 0) {
+      logger.warn(`[ASSIGN] ${bookingId} — no eligible provider for typeId=${typeId}`);
+      await event.data.ref.update({
+        assignmentError: 'no_eligible_provider',
+        assignmentErrorAt: FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    // 3. Get queue state for this day (Bangkok time)
+    const dateKey = formatDateKey(bookingDate);
+    const queueRef = db
+      .collection('service_shops').doc(shopId)
+      .collection('queue_state').doc(dateKey);
+
+    const queueSnap = await queueRef.get();
+    let lastIdx;
+    if (queueSnap.exists) {
+      lastIdx = queueSnap.data().lastAssignedIndex ?? -1;
+    } else {
+      // New day — seed from most recent previous queue_state so rotation continues
+      const prevSnap = await db
+        .collection('service_shops').doc(shopId)
+        .collection('queue_state')
+        .orderBy('date', 'desc')
+        .limit(1)
+        .get();
+      if (!prevSnap.empty) {
+        const prevData = prevSnap.docs[0].data();
+        const prevProviderId = prevData.lastAssignedProviderId;
+        if (prevProviderId) {
+          // Resolve by ID to handle provider reordering between days
+          const idx = providers.findIndex((p) => p.id === prevProviderId);
+          lastIdx = idx !== -1 ? idx : (prevData.lastAssignedIndex ?? -1);
+        } else {
+          lastIdx = prevData.lastAssignedIndex ?? -1;
+        }
+      } else {
+        lastIdx = -1; // First ever booking in this shop
+      }
+    }
+    const startIdx = (lastIdx + 1) % providers.length;
+
+    logger.info(
+      `[ASSIGN] ${bookingId} dateKey=${dateKey} startIdx=${startIdx}` +
+      ` eligible=${eligible.length}/${providers.length}`,
+    );
+
+    // 4. Round-robin: iterate full providers list from startIdx, wrap around
+    for (let i = 0; i < providers.length; i++) {
+      const idx = (startIdx + i) % providers.length;
+      const provider = providers[idx];
+
+      // Skip providers who can't do this service type
+      if (!eligible.some(p => p.id === provider.id)) {
+        logger.info(`[ASSIGN] idx=${idx} ${provider.name} — ineligible, skip`);
+        continue;
+      }
+
+      // Check for time conflict: does this provider have an active booking
+      // that overlaps with [bookingDate, bookingEndAt)?
+      //
+      // Firestore: bookingDate < bookingEndAt (their start < our end)
+      // Memory:    bookingEndAt > bookingDate  (their end  > our start)
+      // Together: full overlap detection.
+      const conflictSnap = await db
+        .collection('service_bookings')
+        .where('shopId', '==', shopId)
+        .where('providerId', '==', provider.id)
+        .where('status', 'in', ['pending', 'confirmed', 'in_service'])
+        .where('bookingDate', '<', admin.firestore.Timestamp.fromDate(bookingEndAt))
+        .get();
+
+      const hasConflict = conflictSnap.docs.some(d => {
+        const bEnd = d.data().bookingEndAt?.toDate();
+        return bEnd && bEnd > bookingDate;
+      });
+
+      if (hasConflict) {
+        logger.info(`[ASSIGN] idx=${idx} ${provider.name} — busy, skip`);
+        continue;
+      }
+
+      // Found a free eligible provider — assign!
+      logger.info(`[ASSIGN] ${bookingId} → ${provider.name} (idx=${idx})`);
+
+      await Promise.all([
+        event.data.ref.update({
+          providerId: provider.id,
+          providerName: provider.name,
+          assignedByQueue: true,
+          assignedAt: FieldValue.serverTimestamp(),
+        }),
+        queueRef.set(
+          {
+            date: dateKey,
+            lastAssignedIndex: idx,
+            lastAssignedProviderId: provider.id,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        ),
+      ]);
+
+      return;
+    }
+
+    // 5. All eligible providers busy — flag for vendor attention
+    logger.warn(`[ASSIGN] ${bookingId} — all_busy in shop ${shopId}`);
+    await event.data.ref.update({
+      assignmentError: 'all_busy',
+      assignmentErrorAt: FieldValue.serverTimestamp(),
+    });
+  },
+);

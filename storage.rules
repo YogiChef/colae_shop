@@ -1,0 +1,83 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Profile images
+    match /profilePick/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
+    // Hotel images (vendor uploads)
+    match /hotel_images/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.auth.uid == userId
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+                 && request.auth.uid == userId;
+    }
+
+    // Hotel payment slips (buyer uploads)
+    match /hotel_slips/{bookingId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
+    // Hotel review images (buyer uploads)
+    match /review_images/{bookingId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
+    // Delivery / product images
+    match /delivery_images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
+    match /product_images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
+    // Service shop images — Phase 2C2 (vendor uploads shop cover/logo)
+    match /service_shop_images/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.auth.uid == userId
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+                 && request.auth.uid == userId;
+    }
+
+    // Service item images — Phase 2C2 (vendor uploads per service)
+    match /service_images/{userId}/{serviceId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                && request.auth.uid == userId
+                && request.resource.size < 5 * 1024 * 1024
+                && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+                 && request.auth.uid == userId;
+    }
+
+  }
+}

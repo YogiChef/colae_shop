@@ -20,8 +20,7 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with SingleTickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> {
   CollectionReference buyers = firestore.collection('buyers');
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -38,12 +37,15 @@ class _LoginPageState extends State<LoginPage>
         await auth.currentUser!.reload();
 
         final uid = auth.currentUser!.uid;
-        final vendorDoc = await firestore.collection('vendors').doc(uid).get();
+        final vendorDoc =
+            await firestore.collection('vendors').doc(uid).get();
 
         if (!vendorDoc.exists) {
           await auth.signOut();
           setState(() => _isLoading = false);
-          Fluttertoast.showToast(msg: 'ไม่พบบัญชีร้านค้า กรุณาตรวจสอบอีเมล');
+          Fluttertoast.showToast(
+            msg: 'ไม่พบบัญชีร้านค้า กรุณาตรวจสอบอีเมล',
+          );
           return;
         }
 
@@ -83,7 +85,8 @@ class _LoginPageState extends State<LoginPage>
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            keyboardDismissBehavior:
+                ScrollViewKeyboardDismissBehavior.onDrag,
             child: Column(
               children: [
                 Container(
@@ -101,28 +104,23 @@ class _LoginPageState extends State<LoginPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(height: 120.h),
+                      SizedBox(height: 30.h),
                       InputTextfield(
-                        onChanged: (value) {
-                          setState(() {
-                            email = value;
-                          });
-                        },
+                        onChanged: (value) =>
+                            setState(() { email = value; }),
                         validator: (value) {
                           if (value!.isEmpty) {
                             return 'Please enter your email address';
-                          } else if (value.isValidEmail() == false) {
-                            return 'invalid email';
-                          } else {
-                            return null;
                           }
+                          if (value.isValidEmail() == false) {
+                            return 'invalid email';
+                          }
+                          return null;
                         },
                         hintText: 'Enter Email',
                         textInputType: TextInputType.emailAddress,
-                        prefixIcon: Icon(
-                          Icons.email,
-                          color: Colors.cyan.shade400,
-                        ),
+                        prefixIcon:
+                            Icon(Icons.email, color: Colors.cyan.shade400),
                       ),
                       InputTextfield(
                         hintText: 'Enter Password',
@@ -134,30 +132,25 @@ class _LoginPageState extends State<LoginPage>
                         obscureText: _obscureText,
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscureText == true
+                            _obscureText
                                 ? Icons.visibility
                                 : Icons.visibility_off,
                             size: 20.r,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscureText = !_obscureText;
-                            });
-                          },
+                          onPressed: () => setState(
+                            () { _obscureText = !_obscureText; },
+                          ),
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            password = value;
-                          });
-                        },
+                        onChanged: (value) =>
+                            setState(() { password = value; }),
                         validator: (value) {
                           if (value!.isEmpty) {
                             return 'Please enter your password';
-                          } else if (value.length < 8) {
-                            return 'Passwords longer than eight characters';
-                          } else {
-                            return null;
                           }
+                          if (value.length < 8) {
+                            return 'Passwords longer than eight characters';
+                          }
+                          return null;
                         },
                       ),
                       SizedBox(height: 50.h),
