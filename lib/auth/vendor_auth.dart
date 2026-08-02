@@ -41,7 +41,7 @@ class _VendorAuthPageState extends State<VendorAuthPage> {
     try {
       final buyerQuery = await firestore
           .collection('buyers')
-          .where('email', isEqualTo: email)
+          .where('custemail', isEqualTo: email) // buyers ใช้ field 'custemail' ไม่ใช่ 'email'
           .limit(1)
           .get();
 
@@ -49,6 +49,10 @@ class _VendorAuthPageState extends State<VendorAuthPage> {
         return true;
       }
 
+      // NOTE: riders ใช้ phone-only auth ไม่มี email field ใน collection
+      // user ที่ register colae_bike อย่างเดียวจะไม่มี email ใน Firebase Auth
+      // → ไม่สามารถล็อกอิน colae_shop ด้วย email ได้อยู่แล้ว
+      // (ถ้า user เดียวกัน register ทั้ง colae_cust + colae_bike จะถูก block ผ่าน buyers check ข้างบน)
       final riderQuery = await firestore
           .collection('riders')
           .where('email', isEqualTo: email)

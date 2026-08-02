@@ -254,6 +254,41 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: mainColor,
+        leading: IconButton(
+          icon: Icon(IconlyLight.profile, size: 26.sp, color: Colors.white),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const VendorProfileEditPage(),
+              ),
+            );
+          },
+        ),
+        title: Text(
+          'ตั้งค่าเวลาร้านค้า',
+          style: styles(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(IconlyLight.logout, size: 26.sp, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LogOutPage()),
+              );
+            },
+          ),
+        ],
+        centerTitle: true,
+        elevation: 0,
+      ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _vendorStream,
         builder: (context, snapshot) {
@@ -286,54 +321,8 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
           return SingleChildScrollView(
             padding: EdgeInsets.all(16.w),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(height: 20.h),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        IconlyLight.profile,
-                        size: 26.sp,
-                        color: context.isDark ? Colors.black54 : mainColor,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const VendorProfileEditPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    Text(
-                      'ตั้งค่าเวลาร้านค้า',
-                      style: styles(
-                        fontSize: 18.sp,
-                        fontWeight: FontWeight.w600,
-                        color: context.isDark ? Colors.black54 : mainColor,
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        IconlyLight.logout,
-                        size: 26.sp,
-                        color: context.isDark ? Colors.black54 : mainColor,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LogOutPage(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: 16.h),
                 ..._days.asMap().entries.map((entry) {
                   final index = entry.key;
                   final shortDay = entry.value; // 'Mon'
@@ -362,13 +351,8 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
                   );
                 }),
                 SizedBox(height: 40.h),
-                Padding(
-                  padding: EdgeInsetsGeometry.only(
-                    left: 20.w,
-                    right: 20.w,
-                    top: 12.h,
-                    bottom: 12.h,
-                  ),
+                SizedBox(
+                  width: width * 0.5,
                   child: ButtonWidget(
                     label: 'บันทึก',
                     style: styles(
@@ -392,11 +376,11 @@ class _StoreSettingsPageState extends State<StoreSettingsPage> {
 
       floatingActionButton: FloatingActionButton(
         heroTag: 'table qr ',
-        backgroundColor: mainColor,
+        backgroundColor: Colors.white,
 
         child: Icon(
           Icons.table_restaurant_rounded,
-          color: Colors.white,
+          color: mainColor,
           size: 35.r,
         ),
         onPressed: () async {

@@ -37,14 +37,11 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
   bool _active = true;
   bool _isSaving = false;
 
-  // Specialties (list of typeIds)
   List<String> _selectedSpecialties = [];
 
-  // Service types for this category (global + shop's custom)
   List<ServiceType> _availableTypes = [];
   bool _loadingTypes = true;
 
-  // Photo
   File? _photoFile;
   String? _existingPhotoUrl;
 
@@ -144,7 +141,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
           .collection('providers');
 
       if (_isEdit) {
-        // ── Edit mode ─────────────────────────────────────────────────────
         final providerId = widget.existingProviderId!;
         String? photoUrl = _existingPhotoUrl;
         if (_photoFile != null) {
@@ -163,7 +159,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
         EasyLoading.dismiss();
         Fluttertoast.showToast(msg: 'อัปเดตข้อมูลพนักงานแล้ว');
       } else {
-        // ── Add mode — client-side Firestore write ─────────────────────
         final countSnap = await providersRef.get();
         final order = countSnap.docs.length;
 
@@ -224,11 +219,9 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Photo ─────────────────────────────────────────────
                     Center(child: _buildPhotoPicker()),
                     SizedBox(height: 24.h),
 
-                    // ── Name ──────────────────────────────────────────────
                     _sectionTitle('ชื่อพนักงาน'),
                     TextFormField(
                       controller: _nameCtrl,
@@ -242,7 +235,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
 
                     SizedBox(height: 16.h),
 
-                    // ── Specialties ───────────────────────────────────────
                     _sectionTitle('ความเชี่ยวชาญ'),
                     Text(
                       'เลือกบริการที่พนักงานทำได้ (ไม่เลือก = ทำได้ทุกอย่าง)',
@@ -317,7 +309,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
 
                     SizedBox(height: 16.h),
 
-                    // ── Active switch ─────────────────────────────────────
                     _sectionTitle('สถานะ'),
                     Container(
                       decoration: BoxDecoration(
@@ -355,7 +346,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
 
                     SizedBox(height: 32.h),
 
-                    // ── Save button ───────────────────────────────────────
                     SizedBox(
                       width: double.infinity,
                       height: 52.h,
@@ -384,8 +374,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
             ),
     );
   }
-
-  // ─── Custom Type Dialog ────────────────────────────────────────────────────
 
   Future<void> _showAddCustomTypeDialog() async {
     final ctrl = TextEditingController();
@@ -458,8 +446,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
     );
   }
 
-  // ─── Photo Picker ──────────────────────────────────────────────────────────
-
   Widget _buildPhotoPicker() {
     final hasPhoto = _photoFile != null || _existingPhotoUrl != null;
     return GestureDetector(
@@ -497,8 +483,6 @@ class _AddEditProviderPageState extends State<AddEditProviderPage> {
       ),
     );
   }
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   Widget _sectionTitle(String text) {
     return Padding(

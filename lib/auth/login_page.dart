@@ -64,12 +64,16 @@ class _LoginPageState extends State<LoginPage> {
           );
         }
       } on FirebaseAuthException catch (e) {
+        await auth.signOut();
+        if (!mounted) return;
         setState(() => _isLoading = false);
         String msg = e.code == 'user-not-found'
             ? 'ไม่พบผู้ใช้'
             : 'กรุณากรอกข้อมูลให้ถูกต้อง';
         Fluttertoast.showToast(msg: msg);
       } catch (e) {
+        await auth.signOut();
+        if (!mounted) return;
         setState(() => _isLoading = false);
         Fluttertoast.showToast(msg: e.toString());
       }

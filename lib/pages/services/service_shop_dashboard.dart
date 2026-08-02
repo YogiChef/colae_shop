@@ -1,8 +1,6 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:colae_shop/pages/services/add_service_page.dart';
-import 'package:colae_shop/pages/services/edit_service_shop_page.dart';
 import 'package:colae_shop/pages/services/manage_providers_page.dart';
 import 'package:colae_shop/pages/services/service_earnings_page.dart';
 import 'package:colae_shop/pages/services/services_manage_page.dart';
@@ -12,7 +10,6 @@ import 'package:colae_shop/pages/services/walk_in_service_page.dart';
 import 'package:colae_shop/services/sevice.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class ServiceShopDashboard extends StatefulWidget {
@@ -131,7 +128,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                   padding: EdgeInsets.symmetric(horizontal: 16.w),
                   children: [
                     _buildBlock(
-                      icon: Icons.store_outlined,
+                      icon: Image.asset('images/shop_data.png'),
                       title: 'ข้อมูลร้าน',
                       color: const Color(0xFFFCE4EC),
                       iconColor: const Color(0xFFC2185B),
@@ -148,7 +145,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                       ),
                     ),
                     _buildBlock(
-                      icon: Icons.calendar_month_outlined,
+                      icon: Image.asset('images/reserve.png'),
                       title: 'การจอง',
                       badge: pendingCount,
                       color: const Color(0xFFE8F5E9),
@@ -161,7 +158,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                       ),
                     ),
                     _buildBlock(
-                      icon: Icons.person_add_alt_1_outlined,
+                      icon: Image.asset('images/walk_in.png'),
                       title: 'ลูกค้าเข้าร้าน',
                       color: const Color(0xFFFFF3E0),
                       iconColor: const Color(0xFFE65100),
@@ -176,23 +173,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                       ),
                     ),
                     _buildBlock(
-                      icon: Icons.add_business_outlined,
-                      title: 'เพิ่มบริการ',
-                      color: const Color(0xFFF3E5F5),
-                      iconColor: const Color(0xFF6A1B9A),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AddServicePage(
-                            shopCategoryId:
-                                widget.shopData['categoryId'] as String? ?? '',
-                            shopId: _uid,
-                          ),
-                        ),
-                      ),
-                    ),
-                    _buildBlock(
-                      icon: IconlyLight.bag,
+                      icon: Image.asset('images/service_shop.png'),
                       title: 'บริการของร้าน',
                       color: Colors.blue.withOpacity(0.1),
                       iconColor: Colors.amber,
@@ -206,21 +187,9 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                         ),
                       ),
                     ),
+
                     _buildBlock(
-                      icon: IconlyLight.edit,
-                      title: 'แก้ไขข้อมูลร้าน',
-                      color: Colors.blueGrey.shade100,
-                      iconColor: Colors.blueGrey,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              EditServiceShopPage(shopData: widget.shopData),
-                        ),
-                      ),
-                    ),
-                    _buildBlock(
-                      icon: Icons.people_alt_outlined,
+                      icon: Image.asset('images/employees.png'),
                       title: 'พนักงาน',
                       color: Colors.deepPurple.shade50,
                       iconColor: Colors.deepPurple,
@@ -235,7 +204,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                       ),
                     ),
                     _buildBlock(
-                      icon: Icons.people_alt_outlined,
+                      icon: Image.asset('images/income.webp'),
                       title: 'รายได้จากบริการ',
                       color: Colors.brown.shade50,
                       iconColor: Colors.brown,
@@ -261,7 +230,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
   }
 
   Widget _buildBlock({
-    required IconData icon,
+    required Image icon,
     required String title,
     Color color = Colors.white,
     Color iconColor = Colors.grey,
@@ -290,7 +259,7 @@ class _ServiceShopDashboardState extends State<ServiceShopDashboard> {
                       color: Colors.white.withOpacity(0.6),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(icon, size: 32.r, color: iconColor),
+                    child: icon,
                   ),
                   SizedBox(height: 12.h),
                   Text(

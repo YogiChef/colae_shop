@@ -1,12 +1,14 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously, unnecessary_cast
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:colae_shop/pages/services/customer_member_scanner_page.dart';
 import 'package:colae_shop/pages/services/vendor_booking_detail_page.dart';
 import 'package:colae_shop/services/sevice.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
@@ -31,11 +33,16 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
   final _customerPhoneController = TextEditingController();
   bool _isSubmitting = false;
 
+  // QR Walk-in: linked buyer member
+  String? _linkedBuyerId;
+  Map<String, dynamic>? _linkedBuyerData;
+
   List<Map<String, dynamic>> _providers = [];
   String? _selectedProviderId;
   String? _selectedProviderName;
   bool _loadingProviders = false;
-  String? _nextInQueueName;
+  String? _actualAssigneeName;
+  String _actualAssigneeLabel = '';
   bool _allProvidersBusy = false;
 
   @override
@@ -45,6 +52,199 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
     super.dispose();
   }
 
+  Future<void> _scanQr() async {
+    final buyerId = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const CustomerMemberScannerPage()),
+    );
+    if (buyerId == null || !mounted) return;
+    await _linkBuyer(buyerId);
+  }
+
+  Future<void> _enterMemberCode() async {
+    final ctrl = TextEditingController();
+    String? error;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14.r),
+          ),
+          title: Text(
+            'กรอกรหัสสมาชิก',
+            style: styles(fontSize: 15.sp, fontWeight: FontWeight.w700),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'กรอกรหัสสมาชิก (referral code) หรือ Member ID ของลูกค้า',
+                style: styles(fontSize: 13.sp, color: context.subColor),
+              ),
+              SizedBox(height: 12.h),
+              TextField(
+                controller: ctrl,
+                style: styles(fontSize: 14.sp),
+                decoration: InputDecoration(
+                  hintText: 'เช่น ABC12345',
+                  hintStyle: styles(fontSize: 12.sp, color: Colors.grey[400]),
+                  errorText: error,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12.w,
+                    vertical: 10.h,
+                  ),
+                ),
+                onChanged: (_) {
+                  if (error != null) setS(() => error = null);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('ยกเลิก', style: styles(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: mainColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+              ),
+              onPressed: () {
+                final input = ctrl.text.trim();
+                if (input.isEmpty) {
+                  setS(() => error = 'กรุณากรอกรหัส');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: Text(
+                'ค้นหา',
+                style: styles(
+                  fontSize: 14.sp,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final input = ctrl.text.trim();
+    EasyLoading.show(status: 'กำลังค้นหา...');
+    try {
+      final directSnap = await FirebaseFirestore.instance
+          .collection('buyers')
+          .doc(input)
+          .get();
+
+      if (directSnap.exists && mounted) {
+        EasyLoading.dismiss();
+        await _linkBuyer(
+          directSnap.id,
+          data: directSnap.data() as Map<String, dynamic>,
+        );
+        return;
+      }
+
+      final normalized = input.toUpperCase();
+      if (!RegExp(r'^[A-Z0-9]+$').hasMatch(normalized)) {
+        EasyLoading.dismiss();
+        if (!mounted) return;
+        Fluttertoast.showToast(
+          msg: 'ไม่พบสมาชิกที่มีรหัสนี้',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      final refSnap = await FirebaseFirestore.instance
+          .collection('buyers')
+          .where('referralCode', isEqualTo: normalized)
+          .limit(1)
+          .get();
+
+      EasyLoading.dismiss();
+      if (!mounted) return;
+
+      if (refSnap.docs.isEmpty) {
+        Fluttertoast.showToast(
+          msg: 'ไม่พบสมาชิกที่มีรหัสนี้',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+
+      await _linkBuyer(
+        refSnap.docs.first.id,
+        data: refSnap.docs.first.data() as Map<String, dynamic>,
+      );
+    } catch (e) {
+      EasyLoading.dismiss();
+      if (!mounted) return;
+      Fluttertoast.showToast(
+        msg: 'เกิดข้อผิดพลาด: $e',
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
+  Future<void> _linkBuyer(String buyerId, {Map<String, dynamic>? data}) async {
+    Map<String, dynamic> buyerData;
+    if (data != null) {
+      buyerData = data;
+    } else {
+      EasyLoading.show(status: 'กำลังโหลด...');
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('buyers')
+            .doc(buyerId)
+            .get();
+        EasyLoading.dismiss();
+        if (!snap.exists || !mounted) return;
+        buyerData = snap.data() as Map<String, dynamic>;
+      } catch (e) {
+        EasyLoading.dismiss();
+        Fluttertoast.showToast(
+          msg: 'โหลดข้อมูลสมาชิกไม่ได้: $e',
+          backgroundColor: Colors.red,
+        );
+        return;
+      }
+    }
+
+    final name = (buyerData['fullName'] as String?) ?? '';
+    final phone = (buyerData['custphone'] as String?) ?? '';
+
+    setState(() {
+      _linkedBuyerId = buyerId;
+      _linkedBuyerData = buyerData;
+      _customerNameController.text = name;
+      _customerPhoneController.text = phone;
+    });
+  }
+
+  void _unlinkBuyer() {
+    setState(() {
+      _linkedBuyerId = null;
+      _linkedBuyerData = null;
+      _customerNameController.clear();
+      _customerPhoneController.clear();
+    });
+  }
+
   Future<void> _loadProviders(String typeId) async {
     if (mounted) {
       setState(() {
@@ -52,7 +252,8 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
         _providers = [];
         _selectedProviderId = null;
         _selectedProviderName = null;
-        _nextInQueueName = null;
+        _actualAssigneeName = null;
+        _actualAssigneeLabel = '';
         _allProvidersBusy = false;
       });
     }
@@ -65,27 +266,28 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
           .collection('providers')
           .get();
 
-      final all = snap.docs
-          .where((d) => (d.data()['active'] as bool?) != false)
-          .map((d) {
-            final data = d.data();
-            return <String, dynamic>{
-              'id': d.id,
-              'name': (data['name'] as String?) ?? '',
-              'specialties': List<String>.from(
-                data['specialties'] as List? ?? [],
-              ),
-              'order': (data['order'] as num?)?.toInt() ?? 0,
-            };
-          })
-          .toList();
+      final all =
+          snap.docs.where((d) => (d.data()['active'] as bool?) != false).map((
+              d,
+            ) {
+              final data = d.data();
+              return <String, dynamic>{
+                'id': d.id,
+                'name': (data['name'] as String?) ?? '',
+                'specialties': List<String>.from(
+                  data['specialties'] as List? ?? [],
+                ),
+                'order': (data['order'] as num?)?.toInt() ?? 0,
+              };
+            }).toList()
+            ..sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
 
       final busySnap = await FirebaseFirestore.instance
           .collection('service_bookings')
           .where('shopId', isEqualTo: widget.shopId)
           .where('status', whereIn: ['pending', 'confirmed', 'in_service'])
           .get();
-      final busyProviderIds = busySnap.docs
+      final busyIds = busySnap.docs
           .where((d) {
             final endAt = (d.data()['bookingEndAt'] as Timestamp?)?.toDate();
             return endAt != null && endAt.isAfter(now);
@@ -94,19 +296,17 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
           .whereType<String>()
           .toSet();
 
-      final eligible =
-          all.where((p) {
-              if (busyProviderIds.contains(p['id'] as String)) return false;
-              final specs = p['specialties'] as List<String>;
-              return specs.isEmpty || typeId.isEmpty || specs.contains(typeId);
-            }).toList()
-            ..sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
+      final eligible = all.where((p) {
+        if (busyIds.contains(p['id'] as String)) return false;
+        final specs = p['specialties'] as List<String>;
+        return specs.isEmpty || typeId.isEmpty || specs.contains(typeId);
+      }).toList();
 
       debugPrint(
-        '[PROVIDER] shopId=${widget.shopId} typeId=$typeId eligible=${eligible.length} busy=${busyProviderIds.length}',
+        '[PROVIDER] shopId=${widget.shopId} typeId=$typeId eligible=${eligible.length} busy=${busyIds.length}',
       );
 
-      String? nextName;
+      String? pointerProviderId;
       try {
         final nowBkk = now.toUtc().add(const Duration(hours: 7));
         final dateKey =
@@ -121,107 +321,57 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
             .doc(dateKey)
             .get();
 
-        // If no booking today yet, seed from most recent previous day's queue_state
-        Map<String, dynamic>? seedData;
-        if (!queueSnap.exists) {
-          final prevSnap = await FirebaseFirestore.instance
-              .collection('service_shops')
-              .doc(widget.shopId)
-              .collection('queue_state')
-              .orderBy('date', descending: true)
-              .limit(1)
-              .get();
-          if (prevSnap.docs.isNotEmpty) {
-            seedData = prevSnap.docs.first.data();
-          }
-        }
-
-        final allSnap = await FirebaseFirestore.instance
-            .collection('service_shops')
-            .doc(widget.shopId)
-            .collection('providers')
-            .where('active', isEqualTo: true)
-            .get();
-
-        final allProviders =
-            allSnap.docs.map((d) {
-              final data = d.data();
-              return <String, dynamic>{
-                'id': d.id,
-                'name': (data['name'] as String?) ?? '',
-                'specialties': List<String>.from(
-                  data['specialties'] as List? ?? [],
-                ),
-                'order': (data['order'] as num?)?.toInt() ?? 0,
-              };
-            }).toList()..sort(
-              (a, b) => (a['order'] as int).compareTo(b['order'] as int),
-            );
-
-        // Resolve lastIdx — prefer lastAssignedProviderId (ทนต่อ order ซ้ำ/reorder)
-        // ใช้ pattern เดียวกันทั้ง today's doc และ seedData
-        final Map<String, dynamic>? queueData = queueSnap.exists
-            ? queueSnap.data()
-            : seedData;
-
-        debugPrint(
-          '[QUEUE] dateKey=$dateKey exists=${queueSnap.exists} '
-          'seedData=${seedData != null} '
-          'lastAssignedIndex=${queueData?['lastAssignedIndex']} '
-          'lastAssignedProviderId=${queueData?['lastAssignedProviderId']} '
-          'allProviders=${allProviders.map((p) => '${p['name']}(order:${p['order']})').join(', ')}',
-        );
-
-        final int lastIdx;
-        if (queueData != null) {
-          // Prefer ID lookup → ทนต่อ sort instability เมื่อ order ซ้ำกัน
-          final prevId = queueData['lastAssignedProviderId'] as String?;
-          if (prevId != null) {
-            final idx = allProviders.indexWhere((p) => p['id'] == prevId);
-            lastIdx = idx != -1
-                ? idx
-                : ((queueData['lastAssignedIndex'] as num?)?.toInt() ?? -1);
-            debugPrint(
-              '[QUEUE] resolved by providerId "$prevId" → idx=$idx '
-              '(fallback lastAssignedIndex=${queueData['lastAssignedIndex']})',
-            );
-          } else {
-            lastIdx = (queueData['lastAssignedIndex'] as num?)?.toInt() ?? -1;
-            debugPrint('[QUEUE] resolved by lastAssignedIndex=$lastIdx');
-          }
-        } else {
-          lastIdx = -1;
-          debugPrint('[QUEUE] no queue data → lastIdx=-1 (first booking ever)');
-        }
-
-        debugPrint(
-          '[QUEUE] startIdx=${(lastIdx + 1) % allProviders.length} (lastIdx=$lastIdx length=${allProviders.length})',
-        );
-
-        for (int i = 0; i < allProviders.length; i++) {
-          final idx = ((lastIdx + 1) + i) % allProviders.length;
-          final p = allProviders[idx];
-          if (busyProviderIds.contains(p['id'] as String)) continue;
-          final specs = p['specialties'] as List<String>;
-          if (specs.isEmpty || typeId.isEmpty || specs.contains(typeId)) {
-            nextName = p['name'] as String;
-            debugPrint('[QUEUE] → nextName=$nextName (idx=$idx)');
-            break;
-          }
+        if (queueSnap.exists) {
+          pointerProviderId =
+              queueSnap.data()?['lastAssignedProviderId'] as String?;
         }
       } catch (e) {
         debugPrint('[QUEUE] error: $e');
       }
 
-      debugPrint('[QUEUE] next in queue: $nextName');
+      String? computedName;
+      String computedLabel = '';
+      if (all.isNotEmpty) {
+        int pointerIdx;
+        if (pointerProviderId != null) {
+          pointerIdx = all.indexWhere((p) => p['id'] == pointerProviderId);
+          if (pointerIdx == -1) pointerIdx = 0;
+        } else {
+          final nowBkk = now.toUtc().add(const Duration(hours: 7));
+          pointerIdx = nowBkk.weekday % 7 % all.length;
+        }
+
+        int currentIdx = pointerIdx;
+        for (int i = 0; i < all.length; i++) {
+          final candidate = all[currentIdx];
+          final specs = candidate['specialties'] as List<String>;
+          final canDo =
+              specs.isEmpty || typeId.isEmpty || specs.contains(typeId);
+
+          if (!canDo) {
+            currentIdx = (currentIdx + 1) % all.length;
+            continue;
+          }
+          if (busyIds.contains(candidate['id'] as String)) {
+            currentIdx = (currentIdx + 1) % all.length;
+            continue;
+          }
+          computedName = candidate['name'] as String;
+          computedLabel = (currentIdx == pointerIdx) ? 'ตามคิว' : 'แทนคิว';
+          break;
+        }
+      }
+
+      debugPrint(
+        '[QUEUE] actual assignee preview: $computedName ($computedLabel)',
+      );
 
       if (mounted) {
         setState(() {
           _providers = eligible;
           _allProvidersBusy = eligible.isEmpty && all.isNotEmpty;
-          _nextInQueueName = nextName;
-          // ไม่ auto-select _selectedProviderId — ให้ CF เป็น single source of truth
-          // ผู้ใช้ต้องเลือกเองถ้าต้องการระบุช่าง หรือปล่อยว่างให้ CF จัดคิว
+          _actualAssigneeName = computedName;
+          _actualAssigneeLabel = computedLabel;
           _loadingProviders = false;
         });
       }
@@ -391,6 +541,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
         'vendorId': widget.shopId,
 
         'customerId': null,
+        'buyerId': _linkedBuyerId,
         'customerName': customerName,
         'customerPhone': _customerPhoneController.text.trim(),
 
@@ -417,15 +568,14 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
         'status': status,
         'customerNote': '',
 
-        'providerId': _selectedProviderId, // null → CF จัดคิวอัตโนมัติ
+        'providerId': _selectedProviderId,
         'providerName': _selectedProviderName,
-        'assignedByQueue': _selectedProviderId == null, // true = CF assign
+        'assignedByQueue': _selectedProviderId == null,
 
         'mlmCalculated': false,
         'createdAt': FieldValue.serverTimestamp(),
       };
 
-      // Only set customerArrivedAt if starting immediately (not waiting)
       if (providerFreeAt == null) {
         docData['customerArrivedAt'] = FieldValue.serverTimestamp();
       }
@@ -696,7 +846,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
                             foregroundColor: Colors.red[700],
                             side: BorderSide(color: Colors.red.shade300),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8.r),
+                              borderRadius: BorderRadius.circular(7.r),
                             ),
                           ),
                           onPressed: () {
@@ -713,7 +863,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
               ],
             ],
 
-            SizedBox(height: 20.h),
+            SizedBox(height: 12.h),
 
             Text(
               'ข้อมูลลูกค้า',
@@ -723,74 +873,199 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
                 color: context.purpleColor,
               ),
             ),
-            SizedBox(height: 10.h),
+            SizedBox(height: 20.h),
 
-            Column(
-              children: [
-                TextField(
-                  controller: _customerNameController,
-                  style: styles(fontSize: 14.sp),
-                  decoration: InputDecoration(
-                    labelText: 'ชื่อลูกค้า',
-                    hintText: 'ลูกค้าเดินเข้าร้าน',
-                    hintStyle: styles(fontSize: 12.sp, color: Colors.grey[400]),
-                    labelStyle: styles(
-                      fontSize: 13.sp,
-                      color: context.subColor,
+            if (_linkedBuyerId != null) ...[
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(7.r),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green[700],
+                          size: 18.r,
+                        ),
+                        SizedBox(width: 8.w),
+
+                        Text(
+                          'สมาชิก Colae',
+                          style: styles(
+                            fontSize: 12.sp,
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Spacer(),
+                        TextButton(
+                          onPressed: _unlinkBuyer,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red[400],
+                            padding: EdgeInsets.symmetric(horizontal: 6.w),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text('ยกเลิก', style: styles(fontSize: 12.sp)),
+                        ),
+                      ],
                     ),
-                    prefixIcon: Icon(
-                      Icons.person_outline,
-                      size: 20.r,
-                      color: Colors.grey[400],
+                    Text(
+                      'ชื่อ: ${(_linkedBuyerData?['fullName'] as String?) ?? '-'}',
+                      style: styles(fontSize: 13.sp, color: Colors.green[900]),
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10.r),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    SizedBox(height: 2.h),
+                    Text(
+                      'เบอร์: ${(_linkedBuyerData?['custphone'] as String?)?.isNotEmpty == true ? (_linkedBuyerData!['custphone'] as String) : '-'}',
+                      style: styles(fontSize: 13.sp, color: Colors.green[900]),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10.r),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12.w,
-                      vertical: 12.h,
+                  ],
+                ),
+              ),
+              SizedBox(height: 12.h),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: _scanQr,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            IconlyLight.scan,
+                            size: 18.sp,
+                            color: context.purpleColor,
+                          ),
+                          SizedBox(width: 6.w),
+                          Text(
+                            'สแกน QR',
+                            style: styles(
+                              fontSize: 13.sp,
+                              color: context.purpleColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(height: 12.h),
-                TextField(
-                  controller: _customerPhoneController,
-                  keyboardType: TextInputType.phone,
-                  style: styles(fontSize: 14.sp),
-                  decoration: InputDecoration(
-                    labelText: 'เบอร์โทร',
-                    hintText: 'ไม่บังคับ',
-                    hintStyle: styles(fontSize: 12.sp, color: Colors.grey[400]),
-                    labelStyle: styles(
-                      fontSize: 13.sp,
-                      color: context.subColor,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.phone_outlined,
-                      size: 20.r,
-                      color: Colors.grey[400],
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10.r),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10.r),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12.w,
-                      vertical: 12.h,
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: _enterMemberCode,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            IconlyLight.profile,
+                            size: 18.sp,
+                            color: context.purpleColor,
+                          ),
+                          SizedBox(width: 6.w),
+                          Text(
+                            'รหัสสมาชิก',
+                            style: styles(
+                              fontSize: 13.sp,
+                              color: context.purpleColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+              SizedBox(height: 12.h),
+            ],
+            if (_linkedBuyerId == null) ...[
+              Column(
+                children: [
+                  TextField(
+                    controller: _customerNameController,
+                    style: styles(fontSize: 14.sp),
+                    decoration: InputDecoration(
+                      labelText: 'ชื่อลูกค้า',
+                      hintText: 'ลูกค้าเดินเข้าร้าน',
+                      hintStyle: styles(
+                        fontSize: 12.sp,
+                        color: Colors.grey[400],
+                      ),
+                      labelStyle: styles(
+                        fontSize: 13.sp,
+                        color: context.subColor,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.person,
+                        size: 20.sp,
+                        color: Colors.grey[400],
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10.sp),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10.r),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12.w,
+                        vertical: 12.h,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12.h),
+                  TextField(
+                    controller: _customerPhoneController,
+                    keyboardType: TextInputType.phone,
+                    style: styles(fontSize: 14.sp),
+                    decoration: InputDecoration(
+                      labelText: 'เบอร์โทร',
+                      hintText: 'ไม่บังคับ',
+                      hintStyle: styles(
+                        fontSize: 12.sp,
+                        color: Colors.grey[400],
+                      ),
+                      labelStyle: styles(
+                        fontSize: 13.sp,
+                        color: context.subColor,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.phone,
+                        size: 20.r,
+                        color: Colors.grey[400],
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10.r),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10.r),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12.w,
+                        vertical: 12.h,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             SizedBox(height: 20.h),
 
@@ -823,7 +1098,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
                     SizedBox(height: 6.h),
                     _summaryRow(
                       context,
-                      'ระยะเวลา',
+                      'เวลา',
                       '${(_selectedServiceData!['duration'] as num?)?.toInt() ?? 0} นาที',
                     ),
                     SizedBox(height: 6.h),
@@ -843,8 +1118,12 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
                     SizedBox(height: 6.h),
                     _summaryRow(
                       context,
-                      'ผู้ให้บริการ',
-                      _selectedProviderName ?? '$_nextInQueueName (ตามคิว)',
+                      'พนักงาน',
+                      _selectedProviderName != null
+                          ? _selectedProviderName!
+                          : _actualAssigneeName != null
+                          ? '$_actualAssigneeName ($_actualAssigneeLabel)'
+                          : 'ยังไม่ระบุ',
                     ),
                   ],
                 ),
@@ -852,35 +1131,47 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
               SizedBox(height: 20.h),
             ],
 
-            SizedBox(
-              width: width * 0.8,
-              child: ElevatedButton.icon(
-                icon: Icon(
-                  Icons.play_circle_outline,
-                  color: Colors.white,
-                  size: 20.r,
-                ),
-                label: Text(
-                  'เริ่มบริการ',
-                  style: styles(
-                    fontSize: 15.sp,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+            Align(
+              alignment: Alignment.center,
+              child: SizedBox(
+                width: width * 0.8,
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.play_arrow, color: Colors.white, size: 20.r),
+                  label: Text(
+                    'เริ่มบริการ',
+                    style: styles(
+                      fontSize: 15.sp,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _selectedServiceData != null
-                      ? Colors.blue[600]
-                      : Colors.grey[300],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
+                  style: ElevatedButton.styleFrom(
+                    alignment: Alignment.center,
+                    backgroundColor:
+                        (_selectedServiceData != null &&
+                            (_selectedProviderId != null ||
+                                _actualAssigneeName != null))
+                        ? Colors.blue[600]
+                        : Colors.grey[300],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 14.h),
+                    elevation:
+                        (_selectedServiceData != null &&
+                            (_selectedProviderId != null ||
+                                _actualAssigneeName != null))
+                        ? 2
+                        : 0,
                   ),
-                  padding: EdgeInsets.symmetric(vertical: 14.h),
-                  elevation: _selectedServiceData != null ? 2 : 0,
+                  onPressed:
+                      _selectedServiceData != null &&
+                          !_isSubmitting &&
+                          (_selectedProviderId != null ||
+                              _actualAssigneeName != null)
+                      ? _startService
+                      : null,
                 ),
-                onPressed: _selectedServiceData != null && !_isSubmitting
-                    ? _startService
-                    : null,
               ),
             ),
             SizedBox(height: 32.h),
@@ -913,7 +1204,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
         ),
         child: Row(
           children: [
-            Icon(Icons.info_outline, size: 16.r, color: Colors.grey.shade700),
+            Icon(Icons.info, size: 16.r, color: Colors.grey.shade700),
             SizedBox(width: 8.w),
             Expanded(
               child: Text(
@@ -931,8 +1222,9 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
       value: _selectedProviderId,
       isExpanded: true,
       hint: Text(
-        '$_nextInQueueName (ตามคิว)',
-
+        _actualAssigneeName != null
+            ? '$_actualAssigneeName ($_actualAssigneeLabel)'
+            : 'ไม่มีช่างว่าง',
         overflow: TextOverflow.ellipsis,
         style: styles(fontSize: 13.sp),
       ),
@@ -979,7 +1271,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
   Widget _placeholder() {
     return Container(
       color: Colors.orange.withValues(alpha: 0.12),
-      child: Icon(Icons.spa_rounded, size: 22.r, color: Colors.orange),
+      child: Icon(Icons.spa, size: 22.r, color: Colors.orange),
     );
   }
 
@@ -988,7 +1280,7 @@ class _WalkInServicePageState extends State<WalkInServicePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 70.w,
+          width: 90.w,
           child: Text(
             '$label:',
             style: styles(

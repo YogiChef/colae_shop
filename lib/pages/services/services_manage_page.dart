@@ -66,6 +66,12 @@ class _ServicesManagePageState extends State<ServicesManagePage> {
         backgroundColor: mainColor,
         foregroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            onPressed: () => _goAddService(context),
+            icon: Icon(Icons.add, size: 24.r, color: Colors.white),
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance

@@ -198,7 +198,7 @@ class _BookingsTabState extends State<BookingsTab> {
               firstDay: DateTime.now().subtract(const Duration(days: 60)),
               lastDay: DateTime.now().add(const Duration(days: 365)),
               focusedDay: _focused,
-              rowHeight: 48.w,
+              rowHeight: 54.w,
               daysOfWeekHeight: 20.spMax,
               selectedDayPredicate: (day) => isSameDay(day, _selected),
               calendarFormat: CalendarFormat.month,
@@ -214,7 +214,7 @@ class _BookingsTabState extends State<BookingsTab> {
                 formatButtonVisible: false,
                 titleCentered: true,
                 titleTextStyle: styles(
-                  fontSize: 13.sp,
+                  fontSize: 12.sp,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -246,7 +246,7 @@ class _BookingsTabState extends State<BookingsTab> {
                           Text(
                             '$booked',
                             style: styles(
-                              fontSize: 9.sp,
+                              fontSize: 7.sp,
                               color: Colors.red[800],
                               fontWeight: FontWeight.bold,
                             ),
@@ -274,8 +274,8 @@ class _BookingsTabState extends State<BookingsTab> {
                       children: [
                         Text(
                           '${day.day}',
-                          style: TextStyle(
-                            fontSize: 13.sp,
+                          style: styles(
+                            fontSize: 12.sp,
                             fontWeight: FontWeight.bold,
                             color: mainColor,
                           ),
@@ -283,8 +283,8 @@ class _BookingsTabState extends State<BookingsTab> {
                         if (booked > 0)
                           Text(
                             '$booked',
-                            style: TextStyle(
-                              fontSize: 9.sp,
+                            style: styles(
+                              fontSize: 7.sp,
                               color: Colors.red[800],
                               fontWeight: FontWeight.bold,
                             ),
@@ -312,8 +312,8 @@ class _BookingsTabState extends State<BookingsTab> {
                       children: [
                         Text(
                           '${day.day}',
-                          style: TextStyle(
-                            fontSize: 13.sp,
+                          style: styles(
+                            fontSize: 12.sp,
                             fontWeight: FontWeight.w600,
                             color: mainColor,
                           ),
@@ -321,8 +321,8 @@ class _BookingsTabState extends State<BookingsTab> {
                         if (booked > 0)
                           Text(
                             '$booked',
-                            style: TextStyle(
-                              fontSize: 9.sp,
+                            style: styles(
+                              fontSize: 7.sp,
                               color: Colors.red[800],
                               fontWeight: FontWeight.w600,
                             ),
@@ -965,19 +965,19 @@ class _BookingDetailSheet extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    flex: 4,
+                    flex: 3,
                     child: Text(
                       rows[i].key,
                       style: styles(fontSize: 13.sp, color: Colors.grey[700]),
                     ),
                   ),
                   Expanded(
-                    flex: 6,
+                    flex: 7,
                     child: Text(
                       rows[i].value,
                       textAlign: TextAlign.right,
                       style: styles(
-                        fontSize: 14.sp,
+                        fontSize: 13.sp,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
                       ),
@@ -1510,7 +1510,8 @@ class _BookingDetailSheet extends StatelessWidget {
                   imageUrl: slipUrl,
                   fit: BoxFit.contain,
                   memCacheWidth: 1200,
-                  placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                  placeholder: (_, __) =>
+                      const Center(child: CircularProgressIndicator()),
                   errorWidget: (ctx, __, ___) => Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

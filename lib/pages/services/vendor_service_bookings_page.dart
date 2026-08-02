@@ -3,6 +3,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:colae_shop/pages/services/vendor_booking_detail_page.dart';
 import 'package:colae_shop/services/sevice.dart';
+import 'package:colae_shop/utils/date_time_utils.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -78,26 +79,6 @@ class _BookingTab extends StatelessWidget {
     required this.status,
   });
 
-  static const _months = [
-    'ม.ค.',
-    'ก.พ.',
-    'มี.ค.',
-    'เม.ย.',
-    'พ.ค.',
-    'มิ.ย.',
-    'ก.ค.',
-    'ส.ค.',
-    'ก.ย.',
-    'ต.ค.',
-    'พ.ย.',
-    'ธ.ค.',
-  ];
-
-  String _thaiDateTime(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day} ${_months[dt.month - 1]} ${dt.year + 543}  $h:$m น.';
-  }
 
   Future<void> _callPhone(String phone) async {
     final uri = Uri.parse('tel:$phone');
@@ -385,7 +366,7 @@ class _BookingTab extends StatelessWidget {
             final customerNote = data['customerNote'] as String? ?? '';
             final bd = (data['bookingDate'] as Timestamp?)?.toDate();
             final providerName = data['providerName'] as String?;
-            final isWalkIn = data['isWalkIn'] as bool? ?? false;
+
 
             final ratingData = status == 'completed'
                 ? ((data['rating'] as Map<String, dynamic>?)?['fromCustomer']
@@ -477,7 +458,10 @@ class _BookingTab extends StatelessWidget {
                             ),
                             SizedBox(width: 4.w),
                             Text(
-                              _thaiDateTime(bd),
+                              formatBookingTimeRange(
+                                bd,
+                                durationMinutes: duration,
+                              ),
                               style: styles(
                                 fontSize: 12.sp,
                                 color: context.subColor,

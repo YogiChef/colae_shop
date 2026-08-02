@@ -392,6 +392,14 @@
       ]
     },
     {
+      "collectionGroup": "service_shops",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "categoryId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "service_bookings",
       "queryScope": "COLLECTION",
       "fields": [

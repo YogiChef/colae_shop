@@ -1788,52 +1788,54 @@ exports.assignProviderToBooking = onDocumentCreated(
     }
 
     // 3. Get queue state for this day (Bangkok time)
+    //    lastAssignedProviderId = POINTER (who is NEXT in queue), not last assignee.
     const dateKey = formatDateKey(bookingDate);
     const queueRef = db
       .collection('service_shops').doc(shopId)
       .collection('queue_state').doc(dateKey);
 
     const queueSnap = await queueRef.get();
-    let lastIdx;
+    let pointerProviderId;
+
     if (queueSnap.exists) {
-      lastIdx = queueSnap.data().lastAssignedIndex ?? -1;
-    } else {
-      // New day — seed from most recent previous queue_state so rotation continues
-      const prevSnap = await db
-        .collection('service_shops').doc(shopId)
-        .collection('queue_state')
-        .orderBy('date', 'desc')
-        .limit(1)
-        .get();
-      if (!prevSnap.empty) {
-        const prevData = prevSnap.docs[0].data();
-        const prevProviderId = prevData.lastAssignedProviderId;
-        if (prevProviderId) {
-          // Resolve by ID to handle provider reordering between days
-          const idx = providers.findIndex((p) => p.id === prevProviderId);
-          lastIdx = idx !== -1 ? idx : (prevData.lastAssignedIndex ?? -1);
-        } else {
-          lastIdx = prevData.lastAssignedIndex ?? -1;
-        }
-      } else {
-        lastIdx = -1; // First ever booking in this shop
-      }
+      pointerProviderId = queueSnap.data().lastAssignedProviderId ?? null;
     }
-    const startIdx = (lastIdx + 1) % providers.length;
+    // else: new day → use day-based initial pointer below
+
+    // Resolve pointer index
+    let pointerIdx;
+    if (pointerProviderId) {
+      pointerIdx = providers.findIndex(p => p.id === pointerProviderId);
+      if (pointerIdx === -1) pointerIdx = 0;
+    } else {
+      // No queue state for today → day-based seed (Sun=0..Sat=6 mod n)
+      pointerIdx = bookingDate.getDay() % providers.length;
+    }
 
     logger.info(
-      `[ASSIGN] ${bookingId} dateKey=${dateKey} startIdx=${startIdx}` +
+      `[ASSIGN] ${bookingId} dateKey=${dateKey} pointer=${pointerProviderId} pointerIdx=${pointerIdx}` +
       ` eligible=${eligible.length}/${providers.length}`,
     );
 
-    // 4. Round-robin: iterate full providers list from startIdx, wrap around
-    for (let i = 0; i < providers.length; i++) {
-      const idx = (startIdx + i) % providers.length;
-      const provider = providers[idx];
+    // 4. Loop with 4-case pointer semantics:
+    //   Case 1 (eligible + free)    → assign, advance pointer to (currentIdx+1) % n
+    //   Case 2 (eligible + busy)    → skip, pointer follows cursor (+1)
+    //   Case 3 (specialty mismatch) → skip, pointer stays
+    //   Case 4 (all exhausted)      → all_busy
+    let currentIdx = pointerIdx;
+    let assignedProvider = null;
+    let newPointerIdx = null;
+    let hadSpecialtySkip = false;
 
-      // Skip providers who can't do this service type
-      if (!eligible.some(p => p.id === provider.id)) {
-        logger.info(`[ASSIGN] idx=${idx} ${provider.name} — ineligible, skip`);
+    for (let i = 0; i < providers.length; i++) {
+      const candidate = providers[currentIdx];
+      const canDoSpecialty = eligible.some(p => p.id === candidate.id);
+
+      if (!canDoSpecialty) {
+        // Case 3: specialty mismatch — advance cursor, pointer stays
+        logger.info(`[ASSIGN] idx=${currentIdx} ${candidate.name} — specialty skip (pointer stays)`);
+        currentIdx = (currentIdx + 1) % providers.length;
+        hadSpecialtySkip = true;
         continue;
       }
 
@@ -1846,7 +1848,7 @@ exports.assignProviderToBooking = onDocumentCreated(
       const conflictSnap = await db
         .collection('service_bookings')
         .where('shopId', '==', shopId)
-        .where('providerId', '==', provider.id)
+        .where('providerId', '==', candidate.id)
         .where('status', 'in', ['pending', 'confirmed', 'in_service'])
         .where('bookingDate', '<', admin.firestore.Timestamp.fromDate(bookingEndAt))
         .get();
@@ -1857,39 +1859,57 @@ exports.assignProviderToBooking = onDocumentCreated(
       });
 
       if (hasConflict) {
-        logger.info(`[ASSIGN] idx=${idx} ${provider.name} — busy, skip`);
+        // Case 2: eligible + busy — advance cursor AND pointer (person loses their turn)
+        logger.info(`[ASSIGN] idx=${currentIdx} ${candidate.name} — busy (pointer advances)`);
+        currentIdx = (currentIdx + 1) % providers.length;
+        pointerIdx = currentIdx;
         continue;
       }
 
-      // Found a free eligible provider — assign!
-      logger.info(`[ASSIGN] ${bookingId} → ${provider.name} (idx=${idx})`);
+      // Case 1: eligible + free — assign!
+      logger.info(`[ASSIGN] ${bookingId} → ${candidate.name} (idx=${currentIdx})`);
+      assignedProvider = candidate;
+      newPointerIdx = (currentIdx + 1) % providers.length;
+      break;
+    }
 
+    if (!assignedProvider) {
+      // Case 4: all eligible providers busy — flag for vendor attention
+      logger.warn(`[ASSIGN] ${bookingId} — all_busy in shop ${shopId}`);
+      await event.data.ref.update({
+        assignmentError: 'all_busy',
+        assignmentErrorAt: FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    // Assign booking
+    // Case 3 (specialty skip): pointer stays — do NOT update queue_state
+    // Case 1/2 only: advance pointer to next person
+    const bookingUpdateData = {
+      providerId: assignedProvider.id,
+      providerName: assignedProvider.name,
+      assignedByQueue: !hadSpecialtySkip,
+      assignedBySpecialty: hadSpecialtySkip,
+      assignedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (hadSpecialtySkip) {
+      logger.info(`[ASSIGN] specialty walk — skipping queue_state update, pointer stays at ${pointerProviderId}`);
+      await event.data.ref.update(bookingUpdateData);
+    } else {
+      logger.info(`[ASSIGN] saving pointer → ${providers[newPointerIdx].name} (idx=${newPointerIdx})`);
       await Promise.all([
-        event.data.ref.update({
-          providerId: provider.id,
-          providerName: provider.name,
-          assignedByQueue: true,
-          assignedAt: FieldValue.serverTimestamp(),
-        }),
+        event.data.ref.update(bookingUpdateData),
         queueRef.set(
           {
             date: dateKey,
-            lastAssignedIndex: idx,
-            lastAssignedProviderId: provider.id,
+            lastAssignedProviderId: providers[newPointerIdx].id,
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         ),
       ]);
-
-      return;
     }
-
-    // 5. All eligible providers busy — flag for vendor attention
-    logger.warn(`[ASSIGN] ${bookingId} — all_busy in shop ${shopId}`);
-    await event.data.ref.update({
-      assignmentError: 'all_busy',
-      assignmentErrorAt: FieldValue.serverTimestamp(),
-    });
   },
 );

@@ -45,10 +45,8 @@ class ManageProvidersPage extends StatelessWidget {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => AddEditProviderPage(
-                  shopId: shopId,
-                  categoryId: categoryId,
-                ),
+                builder: (_) =>
+                    AddEditProviderPage(shopId: shopId, categoryId: categoryId),
               ),
             ),
           ),
@@ -62,7 +60,8 @@ class ManageProvidersPage extends StatelessWidget {
             .orderBy('order')
             .snapshots(),
         builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          if (snap.connectionState == ConnectionState.waiting &&
+              !snap.hasData) {
             return Center(child: CircularProgressIndicator(color: mainColor));
           }
 
@@ -79,10 +78,7 @@ class ManageProvidersPage extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: 12.h),
                 child: Text(
                   'พนักงานทั้งหมด: ${docs.length} คน',
-                  style: styles(
-                    fontSize: 13.sp,
-                    color: context.subColor,
-                  ),
+                  style: styles(fontSize: 13.sp, color: context.subColor),
                 ),
               ),
               ...docs.map((doc) {
@@ -108,7 +104,11 @@ class ManageProvidersPage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.people_alt_outlined, size: 64.r, color: Colors.grey[300]),
+            Icon(
+              Icons.people_alt_outlined,
+              size: 64.r,
+              color: Colors.grey[300],
+            ),
             SizedBox(height: 16.h),
             Text(
               'ยังไม่มีพนักงาน',
@@ -126,7 +126,11 @@ class ManageProvidersPage extends StatelessWidget {
             ),
             SizedBox(height: 24.h),
             ElevatedButton.icon(
-              icon: Icon(Icons.person_add_outlined, size: 18.r, color: Colors.white),
+              icon: Icon(
+                Icons.person_add_outlined,
+                size: 18.r,
+                color: Colors.white,
+              ),
               label: Text(
                 '+ เพิ่มพนักงานแรกของคุณ',
                 style: styles(
@@ -159,8 +163,6 @@ class ManageProvidersPage extends StatelessWidget {
   }
 }
 
-// ─── Provider Card ────────────────────────────────────────────────────────────
-
 class _ProviderCard extends StatelessWidget {
   final String docId;
   final Map<String, dynamic> data;
@@ -187,7 +189,9 @@ class _ProviderCard extends StatelessWidget {
             'updatedAt': FieldValue.serverTimestamp(),
           });
       EasyLoading.dismiss();
-      Fluttertoast.showToast(msg: !current ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว');
+      Fluttertoast.showToast(
+        msg: !current ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว',
+      );
     } catch (e) {
       EasyLoading.showError('ผิดพลาด: $e');
     }
@@ -209,7 +213,9 @@ class _ProviderCard extends StatelessWidget {
         await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14.r),
+            ),
             title: Text(
               'ลบไม่ได้',
               style: styles(fontSize: 15.sp, fontWeight: FontWeight.w700),
@@ -221,7 +227,10 @@ class _ProviderCard extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('ตกลง', style: styles(color: mainColor, fontWeight: FontWeight.w700)),
+                child: Text(
+                  'ตกลง',
+                  style: styles(color: mainColor, fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ),
@@ -236,7 +245,9 @@ class _ProviderCard extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14.r),
+        ),
         title: Text(
           'ลบพนักงาน?',
           style: styles(fontSize: 15.sp, fontWeight: FontWeight.w700),
@@ -282,14 +293,18 @@ class _ProviderCard extends StatelessWidget {
     final name = data['name'] as String? ?? '';
     final photo = data['photo'] as String?;
     final active = data['active'] as bool? ?? true;
-    final specialties = List<String>.from(data['specialties'] as List? ?? []);
 
     return Card(
       margin: EdgeInsets.only(bottom: 10.h),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
       elevation: 1,
       child: Padding(
-        padding: EdgeInsets.all(12.r),
+        padding: EdgeInsets.only(
+          left: 12.w,
+          right: 8.w,
+          top: 12.h,
+          bottom: 12.h,
+        ),
         child: Row(
           children: [
             // Avatar
@@ -297,45 +312,24 @@ class _ProviderCard extends StatelessWidget {
             SizedBox(width: 12.w),
 
             // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: styles(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w700,
-                      color: active ? context.purpleColor : Colors.grey[400],
-                    ),
-                  ),
-                  SizedBox(height: 6.h),
-                  specialties.isEmpty
-                      ? _chip(context, 'ทำได้ทุกบริการ', Colors.green)
-                      : Wrap(
-                          spacing: 4.w,
-                          runSpacing: 4.h,
-                          children: [
-                            ...specialties
-                                .take(3)
-                                .map((s) => _chip(context, s, Colors.grey[600]!)),
-                            if (specialties.length > 3)
-                              _chip(
-                                context,
-                                '+${specialties.length - 3}',
-                                Colors.grey[400]!,
-                              ),
-                          ],
-                        ),
-                ],
+            Text(
+              name,
+              style: styles(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w500,
+                color: active ? context.purpleColor : Colors.grey[400],
               ),
             ),
-
-            // Active switch
-            Switch(
-              value: active,
-              activeThumbColor: mainColor,
-              onChanged: (_) => _toggleActive(context, active),
+            const Spacer(),
+            Transform.scale(
+              scale: 0.8,
+              child: Switch(
+                value: active,
+                activeThumbColor: mainColor,
+                trackOutlineColor: WidgetStateProperty.all(Colors.grey[400]),
+                inactiveThumbColor: Colors.grey[400],
+                onChanged: (_) => _toggleActive(context, active),
+              ),
             ),
 
             // Menu
@@ -362,7 +356,12 @@ class _ProviderCard extends StatelessWidget {
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'edit',
-                  child: _menuItem(context, Icons.edit_outlined, 'แก้ไข', mainColor),
+                  child: _menuItem(
+                    context,
+                    Icons.edit_outlined,
+                    'แก้ไข',
+                    mainColor,
+                  ),
                 ),
                 PopupMenuItem(
                   value: 'delete',
@@ -388,7 +387,9 @@ class _ProviderCard extends StatelessWidget {
         CircleAvatar(
           radius: 26.r,
           backgroundColor: mainColor.withValues(alpha: active ? 0.15 : 0.06),
-          backgroundImage: photo != null ? CachedNetworkImageProvider(photo) : null,
+          backgroundImage: photo != null
+              ? CachedNetworkImageProvider(photo)
+              : null,
           child: photo == null
               ? Text(
                   initials,
@@ -415,20 +416,6 @@ class _ProviderCard extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _chip(BuildContext context, String label, Color color) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4.r),
-      ),
-      child: Text(
-        label,
-        style: styles(fontSize: 10.sp, color: color, fontWeight: FontWeight.w500),
-      ),
     );
   }
 

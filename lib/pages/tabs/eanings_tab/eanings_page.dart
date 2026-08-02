@@ -113,10 +113,8 @@ class _EarningPageState extends State<EarningPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => ServiceShopDashboard(
-                shopData: data,
-                categoryName: catName,
-              ),
+              builder: (_) =>
+                  ServiceShopDashboard(shopData: data, categoryName: catName),
             ),
           );
         } else {
@@ -479,7 +477,7 @@ class _EarningPageState extends State<EarningPage> {
           final unreadCount = snapshot.data ?? 0;
           return FloatingActionButton(
             heroTag: 'earning_fab_chat',
-            backgroundColor: Colors.blue[700],
+            backgroundColor: Colors.white,
             onPressed: () {
               Navigator.push(
                 context,
@@ -493,7 +491,7 @@ class _EarningPageState extends State<EarningPage> {
                 style: TextStyle(color: Colors.white, fontSize: 12.sp),
               ),
               badgeStyle: badges.BadgeStyle(badgeColor: Colors.red),
-              child: Icon(IconlyLight.chat, color: Colors.white, size: 35.r),
+              child: Icon(IconlyLight.chat, color: mainColor, size: 35.r),
             ),
           );
         },

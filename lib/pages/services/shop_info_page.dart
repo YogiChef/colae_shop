@@ -10,6 +10,7 @@ import 'package:colae_shop/services/sevice.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_iconly/flutter_iconly.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
@@ -240,6 +241,17 @@ class _ShopInfoPageState extends State<ShopInfoPage> {
         backgroundColor: mainColor,
         foregroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EditServiceShopPage(shopData: widget.shopData),
+              ),
+            ),
+            icon: Icon(IconlyLight.edit, size: 22.r, color: Colors.white),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(16.w),
@@ -522,38 +534,6 @@ class _ShopInfoPageState extends State<ShopInfoPage> {
             ),
             SizedBox(height: 20.h),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: Icon(
-                  Icons.edit_outlined,
-                  size: 18.r,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  'แก้ไขข้อมูล',
-                  style: styles(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: mainColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  padding: EdgeInsets.symmetric(vertical: 12.h),
-                ),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        EditServiceShopPage(shopData: widget.shopData),
-                  ),
-                ),
-              ),
-            ),
             SizedBox(height: 24.h),
           ],
         ),

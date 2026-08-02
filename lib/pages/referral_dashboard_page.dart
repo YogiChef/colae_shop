@@ -11,8 +11,6 @@ import 'package:colae_shop/services/sevice.dart';
 import 'package:colae_shop/pages/minor_page/downline_detail_page.dart';
 import 'package:colae_shop/pages/minor_page/referral_qr_page.dart';
 
-// ─── Data model ───────────────────────────────────────────────────────────────
-
 class _MonthData {
   final String monthKey;
   final String monthLabel;
@@ -30,8 +28,6 @@ class _MonthData {
   });
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 class ReferralDashboardPage extends StatefulWidget {
   const ReferralDashboardPage({super.key});
 
@@ -43,7 +39,6 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
   final String _uid = FirebaseAuth.instance.currentUser!.uid;
   bool _isWithdrawing = false;
 
-  // ── Aggregate earnings state ──────────────────────────────────────────────
   bool _earningsLoading = true;
   double _deliveryThisMonth = 0;
   double _hotelThisMonth = 0;
@@ -60,18 +55,24 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
   Map<String, double> _hotelByMonth = {};
   Map<String, double> _servicesByMonth = {};
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   static const _monthNames = [
-    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+    'ม.ค.',
+    'ก.พ.',
+    'มี.ค.',
+    'เม.ย.',
+    'พ.ค.',
+    'มิ.ย.',
+    'ก.ค.',
+    'ส.ค.',
+    'ก.ย.',
+    'ต.ค.',
+    'พ.ย.',
+    'ธ.ค.',
   ];
 
-  String _mKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+  String _mKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
 
-  String _mLabel(DateTime d) =>
-      '${_monthNames[d.month - 1]} ${d.year + 543}';
+  String _mLabel(DateTime d) => '${_monthNames[d.month - 1]} ${d.year + 543}';
 
   bool _isThisMonth(DateTime dt) {
     final now = DateTime.now();
@@ -91,8 +92,6 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
 
   double get _revenueThisMonth =>
       _deliveryThisMonth + _hotelThisMonth + _servicesThisMonth;
-
-  // ── Load ──────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -194,7 +193,8 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
       if (createdAt == null || createdAt.isBefore(start)) continue;
 
       final status = data['status']?.toString() ?? '';
-      final price = (data['totalAmount'] as num?)?.toDouble() ??
+      final price =
+          (data['totalAmount'] as num?)?.toDouble() ??
           (data['servicePrice'] as num?)?.toDouble() ??
           (data['price'] as num?)?.toDouble() ??
           0.0;
@@ -203,7 +203,8 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
       if (_isThisMonth(createdAt)) {
         _bookingsThisMonth++;
         if (status == 'completed') _completedThisMonth++;
-        if (status == 'cancelled' || status == 'rejected') _cancelledThisMonth++;
+        if (status == 'cancelled' || status == 'rejected')
+          _cancelledThisMonth++;
       }
 
       if (status == 'completed') {
@@ -252,8 +253,6 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
       );
     });
   }
-
-  // ── Existing logic ────────────────────────────────────────────────────────
 
   Future<void> _requestWithdrawal(double amount) async {
     final confirmed = await showDialog<bool>(
@@ -343,22 +342,22 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
     return total;
   }
 
-  // ── New UI: aggregate earnings sections ───────────────────────────────────
-
   Widget _sectionLabel(String text) => Text(
-        text,
-        style: styles(
-          fontSize: 14.sp,
-          fontWeight: FontWeight.w700,
-          color: Colors.deepPurple.shade900,
-        ),
-      );
+    text,
+    style: styles(
+      fontSize: 14.sp,
+      fontWeight: FontWeight.w700,
+      color: Colors.deepPurple.shade900,
+    ),
+  );
 
   Widget _buildEarningsSummary() {
     if (_earningsLoading) {
       return SizedBox(
         height: 60.h,
-        child: const Center(child: CircularProgressIndicator(color: Colors.green)),
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.green),
+        ),
       );
     }
     return Column(
@@ -477,11 +476,8 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
   }
 
   Widget _buildChart() {
-    final maxY = _monthlyHistory.fold(
-          0.0,
-          (a, m) => a > m.total ? a : m.total,
-        ) *
-        1.15;
+    final maxY =
+        _monthlyHistory.fold(0.0, (a, m) => a > m.total ? a : m.total) * 1.15;
 
     return Container(
       height: 220.h,
@@ -623,7 +619,10 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         SizedBox(width: 4.w),
-        Text(label, style: styles(fontSize: 10.sp, color: Colors.black54)),
+        Text(
+          label,
+          style: styles(fontSize: 10.sp, color: Colors.black54),
+        ),
       ],
     );
   }
@@ -703,49 +702,46 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
       'services': Color(0xFFFF6B9D),
     };
 
-    return sources
-        .where((s) => (_mlmBySource[s] ?? 0) > 0)
-        .map((s) {
-          final amount = _mlmBySource[s]!;
-          final pct = _mlmTotalAgg > 0
-              ? '${(amount / _mlmTotalAgg * 100).toStringAsFixed(0)}%'
-              : '0%';
-          return Padding(
-            padding: EdgeInsets.only(bottom: 6.h),
-            child: Row(
-              children: [
-                Container(
-                  width: 8.w,
-                  height: 8.w,
-                  decoration: BoxDecoration(
-                    color: colorMap[s],
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                SizedBox(width: 8.w),
-                Text(
-                  labels[s] ?? s,
-                  style: styles(fontSize: 12.sp, color: Colors.black54),
-                ),
-                const Spacer(),
-                Text(
-                  pct,
-                  style: styles(fontSize: 11.sp, color: Colors.grey),
-                ),
-                SizedBox(width: 12.w),
-                Text(
-                  '฿${_formatNum(amount)}',
-                  style: styles(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
+    return sources.where((s) => (_mlmBySource[s] ?? 0) > 0).map((s) {
+      final amount = _mlmBySource[s]!;
+      final pct = _mlmTotalAgg > 0
+          ? '${(amount / _mlmTotalAgg * 100).toStringAsFixed(0)}%'
+          : '0%';
+      return Padding(
+        padding: EdgeInsets.only(bottom: 6.h),
+        child: Row(
+          children: [
+            Container(
+              width: 8.w,
+              height: 8.w,
+              decoration: BoxDecoration(
+                color: colorMap[s],
+                shape: BoxShape.circle,
+              ),
             ),
-          );
-        })
-        .toList();
+            SizedBox(width: 8.w),
+            Text(
+              labels[s] ?? s,
+              style: styles(fontSize: 12.sp, color: Colors.black54),
+            ),
+            const Spacer(),
+            Text(
+              pct,
+              style: styles(fontSize: 11.sp, color: Colors.grey),
+            ),
+            SizedBox(width: 12.w),
+            Text(
+              '฿${_formatNum(amount)}',
+              style: styles(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   Widget _mlmStat(String label, double amount, Color color) {
@@ -770,8 +766,6 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
       ),
     );
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -858,17 +852,16 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── New: aggregate earnings ──────────────────────────
-                      _buildEarningsSummary(),
-                      SizedBox(height: 20.h),
+                      // _buildEarningsSummary(),
+                      SizedBox(height: 12.h),
+                      _codeCard(code, buyerData['ownerName'] as String? ?? ''),
+
                       _buildChartSection(),
-                      SizedBox(height: 20.h),
-                      _buildMlmSection(),
-                      SizedBox(height: 20.h),
+                      // SizedBox(height: 20.h),
+                      // _buildMlmSection(),
+                      // SizedBox(height: 20.h),
                       Divider(color: Colors.grey.shade300, thickness: 0.5),
                       SizedBox(height: 20.h),
-                      // ── Existing sections ────────────────────────────────
-                      _codeCard(code),
                       _qualCard2Monthly(),
                       _downlineChart(count),
                       _earningsCard(pending, total, withdrawn),
@@ -886,9 +879,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
     );
   }
 
-  // ── Existing widgets ──────────────────────────────────────────────────────
-
-  Widget _codeCard(String code) {
+  Widget _codeCard(String code, String userName) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -901,7 +892,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                 color: context.isDark
                     ? Colors.white
                     : Colors.deepPurple.shade900,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w700,
               ),
             ),
             Spacer(),
@@ -910,7 +901,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
               icon: Icon(
                 Icons.share,
                 color: context.isDark ? Colors.white : Colors.grey,
-                size: 20.sp,
+                size: 22.sp,
               ),
               onPressed: () => Share.share(
                 'สมัครเปิดร้านขายของกับ Colae ด้วยรหัสแนะนำ: $code',
@@ -923,7 +914,10 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ReferralQrPage(referralCode: code),
+                    builder: (_) => ReferralQrPage(
+                      referralCode: code,
+                      userName: userName,
+                    ),
                   ),
                 );
               },
@@ -1285,8 +1279,7 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
                       ),
                       touchCallback: (event, response) {
                         if (event is FlTapUpEvent && response?.spot != null) {
-                          final levelIdx =
-                              response!.spot!.touchedBarGroupIndex;
+                          final levelIdx = response!.spot!.touchedBarGroupIndex;
                           if (levelIdx < 0 || levelIdx >= counts.length) return;
                           if (counts[levelIdx] > 0) {
                             Navigator.push(
@@ -1557,43 +1550,46 @@ class _ReferralDashboardPageState extends State<ReferralDashboardPage> {
 
   Widget _withdrawButton(double pending) {
     final bool canWithdraw = pending >= 5000;
-    return SizedBox(
-      width: double.infinity,
-      height: 60.h,
-      child: ElevatedButton.icon(
-        icon: _isWithdrawing
-            ? SizedBox(
-                width: 20.w,
-                height: 20.h,
-                child: const CircularProgressIndicator(
+    return Align(
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: width * 0.8,
+        height: 60.h,
+        child: ElevatedButton.icon(
+          icon: _isWithdrawing
+              ? SizedBox(
+                  width: 20.w,
+                  height: 20.h,
+                  child: const CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Icon(
+                  Icons.account_balance_wallet,
                   color: Colors.white,
-                  strokeWidth: 2,
+                  size: 20.sp,
                 ),
-              )
-            : Icon(
-                Icons.account_balance_wallet,
-                color: Colors.white,
-                size: 20.sp,
-              ),
-        label: Text(
-          canWithdraw
-              ? 'ถอนเงิน ฿${pending.toStringAsFixed(2)}'
-              : 'ถอนขั้นต่ำ ฿5,000',
-          style: styles(
-            fontSize: 15.sp,
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
+          label: Text(
+            canWithdraw
+                ? 'ถอนเงิน ฿${pending.toStringAsFixed(2)}'
+                : 'ถอนขั้นต่ำ ฿5,000',
+            style: styles(
+              fontSize: 15.sp,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: canWithdraw ? Colors.amber : Colors.grey,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(7.r),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: canWithdraw ? Colors.amber : Colors.grey,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(7.r),
+            ),
           ),
+          onPressed: canWithdraw && !_isWithdrawing
+              ? () => _requestWithdrawal(pending)
+              : null,
         ),
-        onPressed: canWithdraw && !_isWithdrawing
-            ? () => _requestWithdrawal(pending)
-            : null,
       ),
     );
   }

@@ -26,11 +26,13 @@ class VendorController {
         msg: "Login Error: ${e.message ?? e.code}",
         backgroundColor: Colors.red,
       );
+      rethrow;
     } catch (e) {
       Fluttertoast.showToast(
         msg: "เกิดข้อผิดพลาด: $e",
         backgroundColor: Colors.red,
       );
+      rethrow;
     }
   }
 

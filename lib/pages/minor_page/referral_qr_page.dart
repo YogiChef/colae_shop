@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:screenshot/screenshot.dart';
+import 'package:gal/gal.dart';
 import 'package:colae_shop/services/sevice.dart';
 
 class ReferralQrPage extends StatefulWidget {
   final String referralCode;
+  final String userName;
 
-  const ReferralQrPage({super.key, required this.referralCode});
+  const ReferralQrPage({
+    super.key,
+    required this.referralCode,
+    required this.userName,
+  });
 
   @override
   State<ReferralQrPage> createState() => _ReferralQrPageState();
@@ -17,6 +23,7 @@ class ReferralQrPage extends StatefulWidget {
 
 class _ReferralQrPageState extends State<ReferralQrPage> {
   String _selectedApp = 'cust';
+  final ScreenshotController _screenshotController = ScreenshotController();
 
   static const String _baseUrl = 'https://colae-app.web.app/r';
 
@@ -47,9 +54,112 @@ class _ReferralQrPageState extends State<ReferralQrPage> {
     },
   ];
 
-  void _copyLink() {
-    Clipboard.setData(ClipboardData(text: _currentUrl));
-    Fluttertoast.showToast(msg: 'คัดลอกลิ้งค์แล้ว');
+  Widget _buildQrCard() {
+    return Container(
+      width: 400,
+      height: 500,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          Text(
+            'เชิญเข้าร่วม Colae',
+            style: styles(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: mainColor,
+            ),
+          ),
+          Column(
+            children: [
+              Text(
+                widget.userName,
+                style: styles(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'ร้านค้าคู่ค้า',
+                style: styles(fontSize: 13, color: Colors.grey[700]),
+              ),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: QrImageView(
+              data: widget.referralCode,
+              version: QrVersions.auto,
+              size: 200,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Colors.black,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Colors.black,
+              ),
+            ),
+          ),
+          Column(
+            children: [
+              Text(
+                'รหัสแนะนำ: ${widget.referralCode}',
+                style: styles(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'สแกน QR หรือใช้รหัสแนะนำ',
+                style: styles(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ).copyWith(fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveQrToGallery() async {
+    try {
+      final bytes = await _screenshotController.captureFromWidget(
+        _buildQrCard(),
+        pixelRatio: 3.0,
+        delay: const Duration(milliseconds: 200),
+      );
+
+      final hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess();
+        if (!granted) {
+          if (!mounted) return;
+          Fluttertoast.showToast(msg: 'ต้องอนุญาตให้เข้าถึงคลังภาพก่อน');
+          return;
+        }
+      }
+
+      await Gal.putImageBytes(bytes);
+      if (!mounted) return;
+      Fluttertoast.showToast(msg: 'บันทึกภาพสำเร็จ');
+    } catch (e) {
+      if (!mounted) return;
+      Fluttertoast.showToast(msg: 'เกิดข้อผิดพลาด: $e');
+    }
   }
 
   Future<void> _shareLink() async {
@@ -134,7 +244,7 @@ class _ReferralQrPageState extends State<ReferralQrPage> {
             ),
             SizedBox(height: 16.h),
 
-            // QR Code
+            // QR Code แสดงบนหน้าจอ (interactive)
             Column(
               children: [
                 SizedBox(height: 12.h),
@@ -156,11 +266,11 @@ class _ReferralQrPageState extends State<ReferralQrPage> {
                   version: QrVersions.auto,
                   size: 220.w,
                   backgroundColor: Colors.white,
-                  eyeStyle: QrEyeStyle(
+                  eyeStyle: const QrEyeStyle(
                     eyeShape: QrEyeShape.square,
                     color: Colors.black54,
                   ),
-                  dataModuleStyle: QrDataModuleStyle(
+                  dataModuleStyle: const QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
                     color: Colors.black54,
                   ),
@@ -178,25 +288,24 @@ class _ReferralQrPageState extends State<ReferralQrPage> {
             ),
             SizedBox(height: 16.h),
 
-            // ปุ่ม Copy + Share
+            // ปุ่ม บันทึก QR + แชร์
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: const Icon(Icons.content_copy, size: 18),
-                    label: const Text('คัดลอกลิ้งค์'),
+                    icon: const Icon(Icons.save_alt, size: 18),
+                    label: const Text('บันทึก'),
                     style: OutlinedButton.styleFrom(
                       padding: EdgeInsets.symmetric(vertical: 2.h),
                       fixedSize: const Size.fromHeight(40),
                       minimumSize: const Size(0, 40),
-                      maximumSize: const Size(200, 40),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(7.r),
                       ),
                       side: BorderSide(color: color),
                       foregroundColor: color,
                     ),
-                    onPressed: _copyLink,
+                    onPressed: _saveQrToGallery,
                   ),
                 ),
                 SizedBox(width: 8.w),

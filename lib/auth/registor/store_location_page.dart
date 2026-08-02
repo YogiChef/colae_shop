@@ -34,7 +34,60 @@ class _StoreLocationPageState extends State<StoreLocationPage> {
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      final hasSaved = await _loadSavedLocation().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => false,
+      );
+      if (hasSaved) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        // Stream still starts but _userHasSelectedLocation = true blocks override
+        _startLocationStream();
+      } else {
+        await _getCurrentLocation();
+      }
+    } catch (_) {
+      await _getCurrentLocation();
+    }
+  }
+
+  Future<bool> _loadSavedLocation() async {
+    final user = auth.currentUser;
+    if (user == null) return false;
+
+    final doc = await firestore.collection('vendors').doc(user.uid).get();
+    if (!doc.exists) return false;
+
+    final data = doc.data();
+    final geoPoint = data?['location'];
+    if (geoPoint == null || geoPoint is! GeoPoint) return false;
+
+    if (!mounted) return false;
+
+    final saved = LatLng(geoPoint.latitude, geoPoint.longitude);
+    setState(() {
+      _currentPosition = saved;
+      _userHasSelectedLocation = true;
+    });
+    _updateMarker(saved);
+
+    // Show hint that we loaded a saved location
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('แสดงตำแหน่งที่บันทึกไว้ — กด 📍 เพื่อไปตำแหน่งปัจจุบัน'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    });
+
+    return true;
   }
 
   @override
@@ -352,7 +405,7 @@ class _StoreLocationPageState extends State<StoreLocationPage> {
                     SizedBox(width: 8.w),
                     Expanded(
                       child: Text(
-                        'แตะแผนที่หรือลากหมุดเพื่อเลือกตำแหน่งร้าน',
+                        'แตะหรือลากเพื่อย้ายตำแหน่งร้าน',
                         style: TextStyle(
                           fontSize: 12.sp,
                           color: Colors.black87,

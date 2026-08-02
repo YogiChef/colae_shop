@@ -574,8 +574,6 @@ class _ServiceEarningsPageState extends State<ServiceEarningsPage> {
     );
   }
 
-  // ─── Recent Completed Bookings ─────────────────────────────────────────────
-
   Widget _buildRecentBookings() {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
@@ -679,8 +677,6 @@ class _ServiceEarningsPageState extends State<ServiceEarningsPage> {
     );
   }
 
-  // ─── MLM from Services ─────────────────────────────────────────────────────
-
   Widget _buildMlmSection() {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
@@ -741,12 +737,16 @@ class _ServiceEarningsPageState extends State<ServiceEarningsPage> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                icon: Icon(Icons.hub_outlined, size: 18.r, color: mainColor),
+                icon: Icon(
+                  Icons.hub_outlined,
+                  size: 18.r,
+                  color: Colors.blue[700],
+                ),
                 label: Text(
                   'ไปหน้าบริหารธุรกิจ',
                   style: styles(
                     fontSize: 13.sp,
-                    color: mainColor,
+                    color: Colors.blue[700],
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -757,7 +757,7 @@ class _ServiceEarningsPageState extends State<ServiceEarningsPage> {
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: mainColor),
+                  side: BorderSide(color: Colors.transparent),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8.r),
                   ),
